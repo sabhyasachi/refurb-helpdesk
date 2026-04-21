@@ -8,7 +8,7 @@ window.CONFIG = {
 
   // How often to re-fetch the issue-detail screen while it's open.
   // 30s keeps us safely under Google Sheets API rate limits.
-  POLL_INTERVAL_MS: 30000,
+  POLL_INTERVAL_MS: 60000,
 
   // Which user ID to attribute AI-generated comments to.
   AI_BOT_USER_ID: "u_bot",

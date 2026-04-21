@@ -2,6 +2,37 @@
 
 const SESSION_KEY = 'refurb_helpdesk_session_v1';
 
+// ─── Cache helpers (stale-while-revalidate) ───────────────────────────────────
+const CACHE_TTL = {
+  lookups: 30 * 60 * 1000,  // 30 min — workshops/depts/cities rarely change
+  users:   10 * 60 * 1000,  // 10 min — user list changes infrequently
+};
+function getCached(key) {
+  try {
+    const raw = localStorage.getItem(`rh_cache_${key}`);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL[key]) { localStorage.removeItem(`rh_cache_${key}`); return null; }
+    return data;
+  } catch { return null; }
+}
+function setCache(key, data) {
+  try { localStorage.setItem(`rh_cache_${key}`, JSON.stringify({ data, ts: Date.now() })); } catch {}
+}
+function clearAllCache() {
+  try { ['lookups', 'users'].forEach(k => localStorage.removeItem(`rh_cache_${k}`)); } catch {}
+}
+function applyLookups(l) {
+  window.CITIES      = l.cities      || [];
+  window.DEPARTMENTS = l.departments || [];
+  window.WORKSHOPS   = l.workshops   || [];
+}
+function applyUsers(r, setUsers) {
+  const list = r.users || [];
+  window.USERS_BY_ID = Object.fromEntries(list.map(u => [u.user_id, u]));
+  setUsers(list);
+}
+
 function loadSession() {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
@@ -48,28 +79,46 @@ function App() {
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), ttl);
   };
 
-  // Bootstrap lookups + users + issues after login
+  // Bootstrap lookups + users + issues after login.
+  // Strategy: serve lookups + users from cache instantly (app appears immediately),
+  // always fetch issues fresh, refresh stale cache in background.
   const bootstrap = async (user) => {
-    setBooting(true);
+    if (!window.CONFIG.N8N_BASE) {
+      setFatalError('N8N_BASE not configured. Edit web/config.js.');
+      return;
+    }
+
+    const cachedLookups = getCached('lookups');
+    const cachedUsers   = getCached('users');
+    const hasCached     = !!(cachedLookups && cachedUsers);
+
+    // If we have cached static data → apply it immediately, skip loading screen
+    if (hasCached) {
+      applyLookups(cachedLookups);
+      applyUsers(cachedUsers, setUsers);
+    } else {
+      setBooting(true);
+    }
+
     try {
-      if (!window.CONFIG.N8N_BASE) {
-        setFatalError('N8N_BASE not configured. Edit web/config.js.');
-        return;
-      }
+      // Always fetch issues fresh; skip lookups/users if cache is warm
       const [lookups, usersRes, issuesRes] = await Promise.all([
-        API.lookups(),
-        API.usersList(),
+        cachedLookups ? Promise.resolve(cachedLookups) : API.lookups(),
+        cachedUsers   ? Promise.resolve(cachedUsers)   : API.usersList(),
         API.issuesList(user, {}),
       ]);
-      window.CITIES = lookups.cities || [];
-      window.DEPARTMENTS = lookups.departments || [];
-      window.WORKSHOPS = lookups.workshops || [];
-      window.USERS_BY_ID = Object.fromEntries((usersRes.users || []).map(u => [u.user_id, u]));
-      setUsers(usersRes.users || []);
+
+      // Update cache if we just fetched fresh data
+      if (!cachedLookups) setCache('lookups', lookups);
+      if (!cachedUsers)   setCache('users',   usersRes);
+
+      applyLookups(lookups);
+      applyUsers(usersRes, setUsers);
       setIssues(issuesRes.issues || []);
       setPage(user.role === 'workshop' ? 'home' : 'dashboard');
     } catch (e) {
-      setFatalError(`Couldn't load data: ${e.message}`);
+      if (!hasCached) setFatalError(`Couldn't load data: ${e.message}`);
+      else            console.warn('Background refresh failed:', e.message);
     } finally {
       setBooting(false);
     }
@@ -107,7 +156,8 @@ function App() {
     saveSession(s); setSession(s);
   };
   const onLogout = () => {
-    clearSession(); setSession(null); setIssues([]); setUsers([]);
+    clearSession(); clearAllCache();
+    setSession(null); setIssues([]); setUsers([]);
     setOpenIssueId(null); setOpenIssueData(null); setPage('home');
   };
 
@@ -178,12 +228,12 @@ function App() {
     try {
       if (teamDialog?.mode === 'add') {
         const { user } = await API.usersCreate(payload);
-        setUsers(us => [...us, user]);
+        setUsers(us => { const next = [...us, user]; setCache('users', { users: next }); return next; });
         window.USERS_BY_ID[user.user_id] = user;
         toast(`Created ${user.full_name}`, 'success');
       } else {
         const { user } = await API.usersUpdate(teamDialog.initial.user_id, payload);
-        setUsers(us => us.map(u => u.user_id === user.user_id ? user : u));
+        setUsers(us => { const next = us.map(u => u.user_id === user.user_id ? user : u); setCache('users', { users: next }); return next; });
         window.USERS_BY_ID[user.user_id] = user;
         toast(`Updated ${user.full_name}`, 'success');
       }
@@ -194,7 +244,7 @@ function App() {
   const deleteUser = async (user_id) => {
     try {
       await API.usersDelete(user_id);
-      setUsers(us => us.filter(u => u.user_id !== user_id));
+      setUsers(us => { const next = us.filter(u => u.user_id !== user_id); setCache('users', { users: next }); return next; });
       delete window.USERS_BY_ID[user_id];
       toast('User removed', 'success');
       setTeamDialog(null);
