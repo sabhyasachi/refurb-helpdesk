@@ -5,26 +5,41 @@ const API = (() => {
   const base = () => (window.CONFIG?.N8N_BASE || '').replace(/\/$/, '');
   const token = () => (window.SESSION?.user?.user_id || '');
 
-  async function call(path, body) {
+  async function call(path, body, { retries = 2, retryDelay = 2000 } = {}) {
     const url = `${base()}${path}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token() ? { 'Authorization': `Bearer ${token()}` } : {}),
-      },
-      body: JSON.stringify(body || {}),
-    });
-    let data = null;
-    try { data = await res.json(); } catch (_) {}
-    if (!res.ok) {
-      const msg = (data && data.error) || `${res.status} ${res.statusText}`;
-      const err = new Error(msg);
-      err.status = res.status;
-      err.code = data?.code;
-      throw err;
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, retryDelay * attempt));
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token() ? { 'Authorization': `Bearer ${token()}` } : {}),
+          },
+          body: JSON.stringify(body || {}),
+        });
+        let data = null;
+        try { data = await res.json(); } catch (_) {}
+        if (!res.ok) {
+          // Don't retry 4xx errors — only retry 5xx (server/rate-limit failures)
+          if (res.status < 500) {
+            const msg = (data && data.error) || `${res.status} ${res.statusText}`;
+            const err = new Error(msg);
+            err.status = res.status; err.code = data?.code;
+            throw err;
+          }
+          lastErr = new Error((data && data.error) || `${res.status} ${res.statusText}`);
+          lastErr.status = res.status;
+          continue; // retry on 5xx
+        }
+        return data;
+      } catch (e) {
+        if (e.status && e.status < 500) throw e; // don't retry 4xx
+        lastErr = e;
+      }
     }
-    return data;
+    throw lastErr;
   }
 
   async function uploadAttachment(issue_id, file, uploaded_by) {
