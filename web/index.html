@@ -42,5 +42,92 @@
       });
     }
   </script>
+
+  <!-- PWA utility button (mobile + standalone only) -->
+  <style>
+    #pwa-fab { position: fixed; right: 12px; bottom: 12px; z-index: 9999; display: none; }
+    #pwa-fab button.pwa-toggle {
+      width: 36px; height: 36px; border-radius: 50%; border: none;
+      background: rgba(17,24,39,0.75); color: #fff; font-size: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: pointer;
+    }
+    #pwa-fab .pwa-menu {
+      position: absolute; right: 0; bottom: 44px;
+      background: #fff; border: 1px solid #E5E7EB; border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 160px;
+      display: none; overflow: hidden;
+    }
+    #pwa-fab .pwa-menu.open { display: block; }
+    #pwa-fab .pwa-menu button {
+      display: block; width: 100%; text-align: left; background: none; border: none;
+      padding: 10px 14px; font-size: 13px; color: #111827; cursor: pointer;
+    }
+    #pwa-fab .pwa-menu button:hover { background: #F3F4F6; }
+    #pwa-fab .pwa-menu button:disabled { color: #9CA3AF; cursor: not-allowed; }
+    @media (max-width: 900px) { #pwa-fab { display: block; } }
+    @media (display-mode: standalone) { #pwa-fab { display: block; } }
+  </style>
+  <div id="pwa-fab">
+    <div class="pwa-menu" id="pwa-menu">
+      <button id="pwa-install" disabled>Install app</button>
+      <button id="pwa-clear">Clear cache &amp; reload</button>
+    </div>
+    <button class="pwa-toggle" id="pwa-toggle" title="App options">⚙</button>
+  </div>
+  <script>
+    (function () {
+      let deferredPrompt = null;
+      const toggle  = document.getElementById('pwa-toggle');
+      const menu    = document.getElementById('pwa-menu');
+      const install = document.getElementById('pwa-install');
+      const clear   = document.getElementById('pwa-clear');
+
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        install.disabled = false;
+        install.textContent = 'Install app';
+      });
+      window.addEventListener('appinstalled', () => {
+        deferredPrompt = null;
+        install.disabled = true;
+        install.textContent = 'Installed';
+      });
+
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.classList.toggle('open');
+      });
+      document.addEventListener('click', () => menu.classList.remove('open'));
+
+      install.addEventListener('click', async () => {
+        menu.classList.remove('open');
+        if (!deferredPrompt) {
+          alert('Install not available. On iOS: Share → Add to Home Screen. On Chrome: use the address-bar install icon.');
+          return;
+        }
+        deferredPrompt.prompt();
+        try { await deferredPrompt.userChoice; } catch (e) {}
+        deferredPrompt = null;
+        install.disabled = true;
+      });
+
+      clear.addEventListener('click', async () => {
+        menu.classList.remove('open');
+        if (!confirm('Clear cached app files and reload?')) return;
+        try {
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((r) => r.unregister()));
+          }
+          if (window.caches) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+        } catch (e) {}
+        location.reload();
+      });
+    })();
+  </script>
 </body>
 </html>
