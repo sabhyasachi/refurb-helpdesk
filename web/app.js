@@ -264,7 +264,7 @@ function App() {
   const patchIssue = async (patch) => {
     if (!openIssueId) return;
     try {
-      await API.issuesUpdate(openIssueId, patch, session.user.user_id);
+      await API.issuesUpdate(openIssueId, patch, { role: session.user.role, user_id: session.user.user_id, workshop_id: session.user.workshop_id || null });
       const data = await API.issuesGet(session.user, openIssueId);
       setOpenIssueData(data);
       refreshIssues(true);
@@ -274,7 +274,7 @@ function App() {
 
   const reopenIssue = async (issue_id) => {
     try {
-      await API.issuesReopen(issue_id, session.user.user_id);
+      await API.issuesReopen(issue_id, { role: session.user.role, user_id: session.user.user_id, workshop_id: session.user.workshop_id || null });
       if (openIssueId === issue_id) {
         const data = await API.issuesGet(session.user, issue_id);
         setOpenIssueData(data);
