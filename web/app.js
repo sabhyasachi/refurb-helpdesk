@@ -46,6 +46,62 @@ function clearSession() {
   try { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch {}
 }
 
+// ─── Skeleton loader ──────────────────────────────────────────────────────────
+function Skeleton({ w = '100%', h = 18, radius = 8, style = {} }) {
+  return (
+    <div style={{
+      width: w, height: h, borderRadius: radius,
+      background: 'linear-gradient(90deg, #E5E7EB 25%, #F3F4F6 50%, #E5E7EB 75%)',
+      backgroundSize: '200% 100%',
+      animation: 'shimmer 1.4s infinite',
+      flexShrink: 0,
+      ...style,
+    }} />
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div style={{ padding: 24 }}>
+      {/* stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
+        {[0,1,2,3].map(i => (
+          <div key={i} style={{ background: 'white', borderRadius: 14, padding: 18 }}>
+            <Skeleton h={12} w="60%" style={{ marginBottom: 12 }} />
+            <Skeleton h={36} w="40%" />
+          </div>
+        ))}
+      </div>
+      {/* table rows */}
+      <div style={{ background: 'white', borderRadius: 14, padding: 18 }}>
+        <Skeleton h={14} w="30%" style={{ marginBottom: 20 }} />
+        {[0,1,2,3,4].map(i => (
+          <div key={i} style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+            <Skeleton h={14} w="12%" />
+            <Skeleton h={14} w="35%" />
+            <Skeleton h={14} w="15%" />
+            <Skeleton h={14} w="12%" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MobileSkeleton() {
+  return (
+    <div style={{ padding: 16 }}>
+      <Skeleton h={20} w="50%" style={{ marginBottom: 24 }} />
+      {[0,1,2,3].map(i => (
+        <div key={i} style={{ background: 'white', borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          <Skeleton h={14} w="80%" style={{ marginBottom: 10 }} />
+          <Skeleton h={12} w="40%" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Toast({ toasts, onDismiss }) {
   return (
     <div style={{ position: 'fixed', bottom: 24, right: 24, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200, pointerEvents: 'none' }}>
@@ -267,14 +323,52 @@ function App() {
   if (!session?.user) return <LoginScreen onLogin={onLogin} />;
 
   if (booting) {
-    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280' }}>Loading your workspace…</div>;
+    const isMobileRole = session?.user?.role === 'workshop';
+    return (
+      <div style={{ height: '100vh', overflow: 'hidden', background: '#F7F8FA' }}>
+        <style>{`@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }`}</style>
+        {isMobileRole ? <MobileSkeleton /> : (
+          <div style={{ display: 'flex', height: '100vh' }}>
+            {/* sidebar skeleton */}
+            <div style={{ width: 240, background: '#0F1419', padding: 20, flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 32 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.1)' }} />
+                <Skeleton h={14} w={100} style={{ background: 'rgba(255,255,255,0.1)' }} />
+              </div>
+              {[0,1,2].map(i => <Skeleton key={i} h={38} radius={10} style={{ marginBottom: 4, background: 'rgba(255,255,255,0.07)' }} />)}
+            </div>
+            <div style={{ flex: 1, background: '#F7F8FA' }}><DashboardSkeleton /></div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   const user = session.user;
   const isMobile = user.role === 'workshop' || (user.role === 'manager' && window.matchMedia('(max-width: 720px)').matches);
 
   if (openIssueId && !openIssueData) {
-    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280' }}>Loading {openIssueId}…</div>;
+    return (
+      <div style={{ height: '100vh', background: '#F7F8FA', overflow: 'hidden' }}>
+        <style>{`@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }`}</style>
+        <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+          <Skeleton h={14} w={80} style={{ marginBottom: 24 }} />
+          <Skeleton h={28} w="70%" style={{ marginBottom: 12 }} />
+          <Skeleton h={14} w="40%" style={{ marginBottom: 32 }} />
+          <div style={{ background: 'white', borderRadius: 14, padding: 20 }}>
+            {[0,1,2,3].map(i => (
+              <div key={i} style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+                <Skeleton w={36} h={36} radius={18} style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <Skeleton h={12} w="30%" style={{ marginBottom: 8 }} />
+                  <Skeleton h={14} w="80%" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (openIssueId && openIssueData) {
