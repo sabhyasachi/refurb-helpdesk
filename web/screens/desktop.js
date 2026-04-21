@@ -273,8 +273,8 @@ function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReo
           <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6, margin: '8px 0 12px' }}>Conversation · {comments.length}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {comments.map(c => {
-              const author = userFor(c.commented_by);
-              const isMine = c.commented_by === user.user_id;
+              const author = userFor(c.author_id);
+              const isMine = c.author_id === user.user_id;
               return (
                 <div key={c.comment_id} style={{ display: 'flex', gap: 12, flexDirection: isMine ? 'row-reverse' : 'row' }}>
                   <Avatar user={author} size={32} />
@@ -285,7 +285,7 @@ function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReo
                       {c.is_ai_generated && <span style={{ background: '#F5F3FF', color: '#7C3AED', padding: '1px 6px', borderRadius: 4, marginLeft: 6, fontSize: 10, fontWeight: 700 }}>AI</span>}
                       {c.is_internal && <span style={{ background: '#FEF3C7', color: '#B45309', padding: '1px 6px', borderRadius: 4, marginLeft: 6, fontSize: 10, fontWeight: 700 }}>INTERNAL</span>}
                     </div>
-                    <div style={{ padding: '10px 14px', borderRadius: 14, background: isMine ? '#111827' : (c.is_internal ? '#FFFBEB' : 'white'), color: isMine ? 'white' : '#111827', fontSize: 14, lineHeight: 1.5, boxShadow: isMine ? 'none' : '0 1px 2px rgba(0,0,0,0.04)', border: c.is_internal && !isMine ? '1px solid #FDE68A' : 'none' }}>{c.comment_text}</div>
+                    <div style={{ padding: '10px 14px', borderRadius: 14, background: isMine ? '#111827' : (c.is_internal ? '#FFFBEB' : 'white'), color: isMine ? 'white' : '#111827', fontSize: 14, lineHeight: 1.5, boxShadow: isMine ? 'none' : '0 1px 2px rgba(0,0,0,0.04)', border: c.is_internal && !isMine ? '1px solid #FDE68A' : 'none' }}>{c.body}</div>
                   </div>
                 </div>
               );

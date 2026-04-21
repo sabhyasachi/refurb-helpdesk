@@ -357,8 +357,8 @@ function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, refre
         <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10, paddingLeft: 4 }}>Conversation · {comments.length}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {comments.map(c => {
-            const author = userFor(c.commented_by);
-            const isMine = c.commented_by === user.user_id;
+            const author = userFor(c.author_id);
+            const isMine = c.author_id === user.user_id;
             return (
               <div key={c.comment_id} style={{ display: 'flex', gap: 10, flexDirection: isMine ? 'row-reverse' : 'row' }}>
                 <Avatar user={author} size={30} />
@@ -366,7 +366,7 @@ function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, refre
                   <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4, textAlign: isMine ? 'right' : 'left' }}>
                     <span style={{ fontWeight: 600 }}>{isMine ? 'You' : author?.full_name.split(' ')[0] || '—'}</span> · {relTime(c.created_at)}{c.is_ai_generated ? ' · AI' : ''}
                   </div>
-                  <div style={{ padding: '10px 14px', borderRadius: 14, background: isMine ? '#111827' : 'white', color: isMine ? 'white' : '#111827', fontSize: 14, lineHeight: 1.5, borderTopLeftRadius: isMine ? 14 : 4, borderTopRightRadius: isMine ? 4 : 14, boxShadow: isMine ? 'none' : '0 1px 2px rgba(0,0,0,0.04)' }}>{c.comment_text}</div>
+                  <div style={{ padding: '10px 14px', borderRadius: 14, background: isMine ? '#111827' : 'white', color: isMine ? 'white' : '#111827', fontSize: 14, lineHeight: 1.5, borderTopLeftRadius: isMine ? 14 : 4, borderTopRightRadius: isMine ? 4 : 14, boxShadow: isMine ? 'none' : '0 1px 2px rgba(0,0,0,0.04)' }}>{c.body}</div>
                 </div>
               </div>
             );
