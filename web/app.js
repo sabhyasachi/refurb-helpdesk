@@ -228,6 +228,7 @@ function App() {
         category: draft.category,
         priority: draft.priority,
         raised_by: session.user.user_id,
+        workshop_id: session.user.workshop_id,
       });
       // Upload attachments sequentially so we don't hammer N8N/Drive.
       for (const file of draft.attachments) {
