@@ -96,7 +96,7 @@
           "conditions": [
             {
               "id": "cond-comment",
-              "leftValue": "={{ $json.commentRow }}",
+              "leftValue": "={{ $json.commentRow?.comment_id || '' }}",
               "rightValue": "",
               "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
             }

@@ -35,7 +35,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst { issue_id, patch = {}, scope = {} } = body;\n\nif (!issue_id) throw new Error('MISSING_ISSUE_ID');\n\nconst issues = $input.all().map(x => x.json);\nconst issue = issues.find(i => i.issue_id === issue_id);\nif (!issue) throw new Error('ISSUE_NOT_FOUND');\n\n// Role-based field permissions\nconst isAdmin   = scope.role === 'admin';\nconst isManager = scope.role === 'manager';\nconst isRaiser  = scope.user_id === issue.raised_by;\n\nif (!isAdmin && !isManager && !isRaiser) {\n  throw new Error('FORBIDDEN');\n}\n\n// Only admins/managers can change status, assign, set priority\nconst merged = {\n  ...issue,\n  title:       patch.title       ?? issue.title,\n  description: patch.description ?? issue.description,\n  category:    patch.category    ?? issue.category,\n  updated_at:  new Date().toISOString(),\n};\n\nif (isAdmin || isManager) {\n  merged.priority    = patch.priority    ?? issue.priority;\n  merged.assigned_to = patch.assigned_to !== undefined ? patch.assigned_to : issue.assigned_to;\n  if (patch.status) {\n    const allowed = ['open', 'in_progress', 'resolved', 'closed'];\n    if (!allowed.includes(patch.status)) throw new Error('INVALID_STATUS');\n    merged.status = patch.status;\n  }\n}\n\nreturn [{ json: merged }];"
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst { issue_id, patch = {}, scope = {}, actor = {} } = body;\nconst eff = Object.keys(scope).length ? scope : actor;\n\nif (!issue_id) throw new Error('MISSING_ISSUE_ID');\n\nconst issues = $input.all().map(x => x.json);\nconst issue = issues.find(i => i.issue_id === issue_id);\nif (!issue) throw new Error('ISSUE_NOT_FOUND');\n\n// Role-based field permissions\nconst isAdmin   = eff.role === 'admin';\nconst isManager = eff.role === 'manager';\nconst isRaiser  = eff.user_id === issue.raised_by;\n\nif (!isAdmin && !isManager && !isRaiser) {\n  throw new Error('FORBIDDEN');\n}\n\n// Only admins/managers can change status, assign, set priority\nconst merged = {\n  ...issue,\n  title:       patch.title       ?? issue.title,\n  description: patch.description ?? issue.description,\n  category:    patch.category    ?? issue.category,\n  updated_at:  new Date().toISOString(),\n};\n\nif (isAdmin || isManager) {\n  merged.priority    = patch.priority    ?? issue.priority;\n  merged.assigned_to = patch.assigned_to !== undefined ? patch.assigned_to : issue.assigned_to;\n  if (patch.status) {\n    const allowed = ['open', 'in_progress', 'resolved', 'closed'];\n    if (!allowed.includes(patch.status)) throw new Error('INVALID_STATUS');\n    merged.status = patch.status;\n  }\n}\n\nreturn [{ json: merged }];"
       },
       "id": "j0000001-0003-0003-0003-000000000003",
       "name": "Merge patch",
@@ -49,7 +49,18 @@
         "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
         "sheetName": { "__rl": true, "mode": "list", "value": "issues", "cachedResultName": "issues" },
         "columns": {
-          "mappingMode": "autoMapInputData",
+          "mappingMode": "defineBelow",
+          "value": {
+            "issue_id":       "={{ $json.issue_id }}",
+            "title":          "={{ $json.title }}",
+            "description":    "={{ $json.description }}",
+            "category":       "={{ $json.category }}",
+            "priority":       "={{ $json.priority }}",
+            "status":         "={{ $json.status }}",
+            "assigned_to":    "={{ $json.assigned_to }}",
+            "ai_triage_note": "={{ $json.ai_triage_note }}",
+            "updated_at":     "={{ $json.updated_at }}"
+          },
           "matchingColumns": ["issue_id"]
         },
         "options": {}
