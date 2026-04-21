@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#111827" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <title>Refurb Helpdesk</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+</head>
+<body>
+  <div id="root">
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#6B7280;font-size:14px">
+      Loading Refurb Helpdesk…
+    </div>
+  </div>
+
+  <!-- React 18 via CDN + Babel standalone (matches prototype's zero-build approach) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+
+  <script src="./config.js"></script>
+  <script src="./data.js"></script>
+  <script type="text/babel" data-presets="react" src="./utils.js"></script>
+  <script type="text/babel" data-presets="react" src="./api.js"></script>
+  <script type="text/babel" data-presets="react" src="./screens/login.js"></script>
+  <script type="text/babel" data-presets="react" src="./screens/mobile.js"></script>
+  <script type="text/babel" data-presets="react" src="./screens/desktop.js"></script>
+  <script type="text/babel" data-presets="react" src="./screens/team.js"></script>
+  <script type="text/babel" data-presets="react" src="./app.js"></script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>

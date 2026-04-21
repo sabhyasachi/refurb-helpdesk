@@ -1,0 +1,7 @@
+department_id,department_label,color,is_active
+paint,Paint,#F59E0B,TRUE
+body,Body Shop,#EF4444,TRUE
+detailing,Detailing,#3B82F6,TRUE
+mechanical,Mechanical,#10B981,TRUE
+electrical,Electrical,#8B5CF6,TRUE
+qc,Quality Check,#EC4899,TRUE

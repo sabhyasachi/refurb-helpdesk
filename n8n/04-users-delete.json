@@ -1,0 +1,73 @@
+{
+  "name": "RH · users-delete",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "users-delete",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d4000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "rh-users-delete"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{ $vars.SHEET_ID }}",
+        "sheetName": "users",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "user_id": "={{ $('Webhook').first().json.body.user_id }}",
+            "is_active": "FALSE"
+          },
+          "matchingColumns": ["user_id"]
+        },
+        "options": {}
+      },
+      "id": "d4000001-0002-0002-0002-000000000002",
+      "name": "Soft-delete user",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 300],
+      "credentials": {
+        "googleApi": {
+          "id": "REPLACE_WITH_GOOGLE_SA_CRED_ID",
+          "name": "RefurbHelpdesk SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true }",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "d4000001-0003-0003-0003-000000000003",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook":          { "main": [ [ { "node": "Soft-delete user", "type": "main", "index": 0 } ] ] },
+    "Soft-delete user": { "main": [ [ { "node": "Respond",          "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}

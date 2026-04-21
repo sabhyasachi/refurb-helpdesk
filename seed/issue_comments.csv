@@ -1,0 +1,11 @@
+comment_id,issue_id,commented_by,comment_text,is_internal,is_ai_generated,created_at
+CMT-00001,RH-248,u_rajesh,It started around 10am. Nobody touched anything.,FALSE,FALSE,2026-04-21T12:00:00Z
+CMT-00002,RH-248,u_neha,Assigning to Sneha from mechanical — please stop using Bay 3 until she checks.,FALSE,FALSE,2026-04-21T13:00:00Z
+CMT-00003,RH-248,u_sneha,On my way. ETA 30 mins. Please keep the fan off.,FALSE,FALSE,2026-04-21T13:48:00Z
+CMT-00004,RH-247,u_rohan,"Use the MF-Matte (grey label, 3rd shelf). Never use cutting compound on matte.",FALSE,FALSE,2026-04-21T10:00:00Z
+CMT-00005,RH-247,u_priya,"Got it, thanks! Worked perfectly.",FALSE,FALSE,2026-04-21T11:00:00Z
+CMT-00006,RH-246,u_rohan,Likely a worn seal. Sending a replacement kit via courier.,FALSE,FALSE,2026-04-20T18:00:00Z
+CMT-00007,RH-246,u_arun,Kit received. Installing now.,FALSE,FALSE,2026-04-21T08:00:00Z
+CMT-00008,RH-243,u_neha,"Policy: only at end of refurb, with manager present. Shared SOP link with the team.",FALSE,FALSE,2026-04-20T14:00:00Z
+CMT-00009,RH-242,u_sneha,New one dispatched — should arrive today.,FALSE,FALSE,2026-04-19T14:00:00Z
+CMT-00010,RH-241,u_kiran,Calibration issue. Scheduling a service call with CTEK.,FALSE,FALSE,2026-04-21T04:00:00Z

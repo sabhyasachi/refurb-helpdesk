@@ -1,0 +1,5 @@
+city_id,city_label,is_active
+blr,Bengaluru,TRUE
+del,Delhi,TRUE
+mum,Mumbai,TRUE
+hyd,Hyderabad,TRUE

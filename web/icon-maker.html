@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Icon Maker — Refurb Helpdesk</title>
+<style>
+  body { font-family: system-ui; padding: 24px; background: #F7F8FA; color: #111827; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  p { color: #6B7280; font-size: 14px; margin: 0 0 16px; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  .card { background: white; border-radius: 14px; padding: 18px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  canvas { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  button { background: #111827; color: white; padding: 8px 16px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+  <h1>Icon Maker</h1>
+  <p>Open this page in Chrome, click the three Download buttons, and save each PNG into <code>web/icons/</code>.</p>
+  <div class="row" id="canvases"></div>
+  <script>
+    function drawIcon(ctx, size, maskable) {
+      // Padding for maskable (safe area 80%)
+      const pad = maskable ? size * 0.1 : 0;
+      const inner = size - pad * 2;
+      const grd = ctx.createLinearGradient(pad, pad, pad + inner, pad + inner);
+      grd.addColorStop(0, '#F59E0B');
+      grd.addColorStop(1, '#DC2626');
+      ctx.fillStyle = grd;
+      // Rounded square
+      const r = inner * 0.22;
+      const x = pad, y = pad, w = inner, h = inner;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y,     x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x,     y + h, r);
+      ctx.arcTo(x,     y + h, x,     y,     r);
+      ctx.arcTo(x,     y,     x + w, y,     r);
+      ctx.closePath();
+      ctx.fill();
+      // Letter
+      ctx.fillStyle = 'white';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `800 ${inner * 0.55}px Inter, system-ui, sans-serif`;
+      ctx.fillText('R', size / 2, size / 2 + inner * 0.02);
+    }
+    const makes = [
+      { label: 'icon-192.png', size: 192, maskable: false },
+      { label: 'icon-512.png', size: 512, maskable: false },
+      { label: 'icon-512-maskable.png', size: 512, maskable: true },
+    ];
+    const container = document.getElementById('canvases');
+    makes.forEach(m => {
+      const card = document.createElement('div'); card.className = 'card';
+      const cv = document.createElement('canvas'); cv.width = m.size; cv.height = m.size;
+      cv.style.width = '160px'; cv.style.height = '160px';
+      drawIcon(cv.getContext('2d'), m.size, m.maskable);
+      const label = document.createElement('div'); label.textContent = `${m.size}×${m.size}${m.maskable ? ' maskable' : ''}`;
+      const btn = document.createElement('button'); btn.textContent = `Download ${m.label}`;
+      btn.onclick = () => {
+        const a = document.createElement('a'); a.download = m.label; a.href = cv.toDataURL('image/png'); a.click();
+      };
+      card.append(cv, label, btn); container.appendChild(card);
+    });
+  </script>
+</body>
+</html>

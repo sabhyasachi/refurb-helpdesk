@@ -1,0 +1,6 @@
+workshop_id,workshop_label,city_id,short_name,is_active
+blr-hsr,Bengaluru · HSR,blr,HSR,TRUE
+blr-whf,Bengaluru · Whitefield,blr,Whitefield,TRUE
+del-nsp,Delhi · Netaji Subhash,del,Netaji Subhash,TRUE
+mum-bhw,Mumbai · Bhiwandi,mum,Bhiwandi,TRUE
+hyd-kkt,Hyderabad · Kukatpally,hyd,Kukatpally,TRUE

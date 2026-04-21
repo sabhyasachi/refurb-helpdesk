@@ -1,0 +1,130 @@
+{
+  "name": "RH · auth-login",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "auth-login",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "a1000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "rh-auth-login"
+    },
+    {
+      "parameters": {
+        "documentId": "={{ $vars.SHEET_ID }}",
+        "sheetName": "users",
+        "options": {}
+      },
+      "id": "a1000001-0002-0002-0002-000000000002",
+      "name": "Read users",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 300],
+      "credentials": {
+        "googleApi": {
+          "id": "REPLACE_WITH_GOOGLE_SA_CRED_ID",
+          "name": "RefurbHelpdesk SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const username = ($('Webhook').first().json.body?.username || '').toLowerCase().trim();\nconst rows = $input.all().map(x => x.json);\nconst user = rows.find(u => u.username === username && (u.is_active === 'TRUE' || u.is_active === true));\nif (!user) {\n  return [{ json: { __notFound: true } }];\n}\nreturn [{ json: { user } }];"
+      },
+      "id": "a1000001-0003-0003-0003-000000000003",
+      "name": "Find user",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.__notFound }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000001-0004-0004-0004-000000000004",
+      "name": "Not found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"error\": \"No active user with that user ID\", \"code\": \"USER_NOT_FOUND\" }",
+        "options": {
+          "responseCode": 404,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "a1000001-0005-0005-0005-000000000005",
+      "name": "Respond 404",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ user: $json.user }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "a1000001-0006-0006-0006-000000000006",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Webhook":      { "main": [ [ { "node": "Read users", "type": "main", "index": 0 } ] ] },
+    "Read users":   { "main": [ [ { "node": "Find user",  "type": "main", "index": 0 } ] ] },
+    "Find user":    { "main": [ [ { "node": "Not found?", "type": "main", "index": 0 } ] ] },
+    "Not found?":   { "main": [
+      [ { "node": "Respond 404", "type": "main", "index": 0 } ],
+      [ { "node": "Respond 200", "type": "main", "index": 0 } ]
+    ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}

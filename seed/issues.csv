@@ -1,0 +1,9 @@
+issue_id,title,description,category,priority,status,workshop_id,department_id,raised_by,assigned_to,duplicate_of,ai_triage_note,created_at,updated_at,resolved_at
+RH-248,Paint booth exhaust fan making loud noise,"Bay 3 exhaust fan has been rattling since morning. Makes it hard to hear others and I am worried it will break down during a job.",tool,p0,assigned,blr-hsr,paint,u_rajesh,u_sneha,,,2026-04-21T12:00:00Z,2026-04-21T13:48:00Z,
+RH-247,Which polish compound for matte finish cars?,"Got a matte black Kia Seltos today. Not sure which compound to use — the usual one left swirl marks last time.",question,p2,resolved,blr-hsr,detailing,u_priya,u_rohan,,,2026-04-21T09:00:00Z,2026-04-21T11:00:00Z,2026-04-21T11:00:00Z
+RH-246,Spray gun pressure dropping mid-job,"The Sata 5000 in Bay 1 loses pressure after 10-15 mins of use. Has to be restarted.",bug,p1,in_progress,hyd-kkt,paint,u_arun,u_rohan,,,2026-04-20T14:00:00Z,2026-04-21T08:00:00Z,
+RH-245,Do I need to log a PDI check for wheel alignment?,New SOP says PDI for every refurb but not clear if wheel alignment counts.,process,p2,open,mum-bhw,mechanical,u_arun,,,,2026-04-21T13:00:00Z,2026-04-21T13:00:00Z,
+RH-244,Tablet in QC bay not connecting to Wi-Fi,The Samsung tablet we use for checklists keeps dropping Wi-Fi.,bug,p1,open,blr-hsr,qc,u_rajesh,,,,2026-04-21T13:25:00Z,2026-04-21T13:25:00Z,
+RH-243,How to handle customer who wants to inspect during refurb?,Customer called asking to visit during the refurb.,process,p2,resolved,del-nsp,body,u_priya,u_neha,,,2026-04-19T14:00:00Z,2026-04-20T14:00:00Z,2026-04-20T14:00:00Z
+RH-242,Dent puller broken handle,Large dent puller handle snapped.,tool,p1,resolved,blr-hsr,body,u_deepa,u_sneha,,,2026-04-18T14:00:00Z,2026-04-19T14:00:00Z,2026-04-19T14:00:00Z
+RH-241,Battery tester showing wrong readings,CTEK tester shows 11.8V for a battery that is actually 12.6V.,bug,p1,in_progress,blr-whf,electrical,u_arun,u_kiran,,,2026-04-20T14:00:00Z,2026-04-21T04:00:00Z,

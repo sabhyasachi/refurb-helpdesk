@@ -1,0 +1,11 @@
+user_id,username,full_name,role,workshop_id,department_id,initials,color,password,is_active,created_at
+u_rajesh,rajesh.k,Rajesh Kumar,workshop,blr-hsr,paint,RK,#F59E0B,,TRUE,2026-01-15T10:00:00Z
+u_priya,priya.s,Priya Sharma,workshop,blr-hsr,detailing,PS,#3B82F6,,TRUE,2026-01-15T10:00:00Z
+u_arun,arun.r,Arun Reddy,workshop,hyd-kkt,body,AR,#EF4444,,TRUE,2026-01-15T10:00:00Z
+u_deepa,deepa.n,Deepa Nair,workshop,blr-hsr,mechanical,DN,#10B981,,TRUE,2026-01-15T10:00:00Z
+u_vikram,vikram.s,Vikram Singh,manager,blr-hsr,,VS,#0F766E,,TRUE,2026-01-15T10:00:00Z
+u_neha,neha.i,Neha Iyer,admin,,,NI,#7C3AED,,TRUE,2026-01-15T10:00:00Z
+u_rohan,rohan.d,Rohan Das,poc,,paint,RD,#F59E0B,,TRUE,2026-01-15T10:00:00Z
+u_sneha,sneha.p,Sneha Patel,poc,,mechanical,SP,#10B981,,TRUE,2026-01-15T10:00:00Z
+u_kiran,kiran.r,Kiran Rao,poc,,electrical,KR,#8B5CF6,,TRUE,2026-01-15T10:00:00Z
+u_bot,helpdesk.bot,Helpdesk Bot,bot,,,HB,#7C3AED,,TRUE,2026-01-15T10:00:00Z
