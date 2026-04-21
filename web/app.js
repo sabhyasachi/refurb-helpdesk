@@ -247,8 +247,11 @@ function App() {
 
   const addComment = async (issue_id, text, is_internal = false) => {
     await API.commentsCreate({
-      issue_id, commented_by: session.user.user_id,
-      comment_text: text, is_internal: !!is_internal,
+      issue_id,
+      author_id: session.user.user_id,
+      body: text,
+      is_internal: !!is_internal,
+      scope: { role: session.user.role, user_id: session.user.user_id, workshop_id: session.user.workshop_id || null },
     });
     // Re-fetch the current detail eagerly
     if (openIssueId === issue_id) {
