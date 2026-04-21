@@ -1,0 +1,98 @@
+{
+  "name": "RH · users-create",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "users-create",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e5000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "rh-users-create"
+    },
+    {
+      "parameters": {
+        "documentId": "={{ $vars.SHEET_ID }}",
+        "sheetName": "users",
+        "options": {}
+      },
+      "id": "e5000001-0002-0002-0002-000000000002",
+      "name": "Read users",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 300],
+      "credentials": {
+        "googleApi": {
+          "id": "REPLACE_WITH_GOOGLE_SA_CRED_ID",
+          "name": "RefurbHelpdesk SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst rows = $input.all().map(x => x.json);\n\nif (!/^[a-z0-9._-]{2,}$/.test(body.username || '')) {\n  throw new Error('BAD_USERNAME');\n}\nif (rows.some(u => u.username === body.username)) {\n  throw new Error('USERNAME_TAKEN');\n}\n\nconst firstName = (body.full_name || '').trim().split(/\\s+/)[0].toLowerCase().replace(/[^a-z0-9]/g, '');\nlet base = `u_${firstName || 'user'}`, suffix = 0, id = base;\nwhile (rows.some(u => u.user_id === id)) { suffix++; id = `${base}${suffix}`; }\n\nconst initials = (body.full_name || '').trim().split(/\\s+/).slice(0, 2).map(s => s[0]?.toUpperCase() || '').join('') || 'U';\n\nreturn [{ json: {\n  user_id: id,\n  username: body.username,\n  full_name: body.full_name,\n  role: body.role,\n  workshop_id: body.workshop_id || '',\n  department_id: body.department_id || '',\n  initials,\n  color: body.color || '#6B7280',\n  password: body.password || '',\n  is_active: 'TRUE',\n  created_at: new Date().toISOString(),\n}}];"
+      },
+      "id": "e5000001-0003-0003-0003-000000000003",
+      "name": "Validate + build row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{ $vars.SHEET_ID }}",
+        "sheetName": "users",
+        "columns": {
+          "mappingMode": "autoMapInputData"
+        },
+        "options": {}
+      },
+      "id": "e5000001-0004-0004-0004-000000000004",
+      "name": "Append row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 300],
+      "credentials": {
+        "googleApi": {
+          "id": "REPLACE_WITH_GOOGLE_SA_CRED_ID",
+          "name": "RefurbHelpdesk SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ user: $json }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "e5000001-0005-0005-0005-000000000005",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook":             { "main": [ [ { "node": "Read users",            "type": "main", "index": 0 } ] ] },
+    "Read users":          { "main": [ [ { "node": "Validate + build row", "type": "main", "index": 0 } ] ] },
+    "Validate + build row":{ "main": [ [ { "node": "Append row",           "type": "main", "index": 0 } ] ] },
+    "Append row":          { "main": [ [ { "node": "Respond",              "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}

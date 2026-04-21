@@ -1,0 +1,183 @@
+{
+  "name": "RH · issues-reopen",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "issues-reopen",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "k1000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "rh-issues-reopen"
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issues", "cachedResultName": "issues" },
+        "options": {}
+      },
+      "id": "k1000001-0002-0002-0002-000000000002",
+      "name": "Read issues",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issue_comments", "cachedResultName": "issue_comments" },
+        "options": {}
+      },
+      "id": "k1000001-0003-0003-0003-000000000003",
+      "name": "Read comments",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 380],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst { issue_id, scope = {}, comment = '' } = body;\n\nif (!issue_id) throw new Error('MISSING_ISSUE_ID');\n\nconst issues = $('Read issues').all().map(x => x.json);\nconst issue = issues.find(i => i.issue_id === issue_id);\nif (!issue) throw new Error('ISSUE_NOT_FOUND');\n\nconst isRaiser = scope.user_id === issue.raised_by;\nconst isAdmin  = scope.role === 'admin';\nif (!isRaiser && !isAdmin) throw new Error('FORBIDDEN');\n\nconst closedStatuses = ['resolved', 'closed'];\nif (!closedStatuses.includes(issue.status)) {\n  throw new Error('ISSUE_NOT_CLOSED');\n}\n\nconst now = new Date().toISOString();\n\n// Build updated issue\nconst updatedIssue = { ...issue, status: 'reopened', updated_at: now };\n\n// Optionally build a comment row\nlet commentRow = null;\nif (comment && comment.trim()) {\n  const existingComments = $('Read comments').all().map(x => x.json);\n  const cNums = existingComments\n    .map(c => parseInt((c.comment_id || '').replace('CMT-', ''), 10))\n    .filter(n => !isNaN(n));\n  const nextC = cNums.length ? Math.max(...cNums) + 1 : 1;\n  commentRow = {\n    comment_id: 'CMT-' + String(nextC).padStart(4, '0'),\n    issue_id,\n    author_id: scope.user_id || '',\n    body: comment.trim(),\n    is_internal: 'FALSE',\n    created_at: now,\n  };\n}\n\nreturn [{ json: { updatedIssue, commentRow } }];"
+      },
+      "id": "k1000001-0004-0004-0004-000000000004",
+      "name": "Build reopen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issues", "cachedResultName": "issues" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "issue_id":   "={{ $json.updatedIssue.issue_id }}",
+            "status":     "={{ $json.updatedIssue.status }}",
+            "updated_at": "={{ $json.updatedIssue.updated_at }}"
+          },
+          "matchingColumns": ["issue_id"]
+        },
+        "options": {}
+      },
+      "id": "k1000001-0005-0005-0005-000000000005",
+      "name": "Update issue",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [940, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-comment",
+              "leftValue": "={{ $json.commentRow }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "k1000001-0006-0006-0006-000000000006",
+      "name": "Has comment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [940, 380]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issue_comments", "cachedResultName": "issue_comments" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "comment_id":  "={{ $json.commentRow.comment_id }}",
+            "issue_id":    "={{ $json.commentRow.issue_id }}",
+            "author_id":   "={{ $json.commentRow.author_id }}",
+            "body":        "={{ $json.commentRow.body }}",
+            "is_internal": "={{ $json.commentRow.is_internal }}",
+            "created_at":  "={{ $json.commentRow.created_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "k1000001-0007-0007-0007-000000000007",
+      "name": "Append comment",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1160, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ issue: $('Build reopen').first().json.updatedIssue }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "k1000001-0008-0008-0008-000000000008",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1380, 300]
+    }
+  ],
+  "connections": {
+    "Webhook":       { "main": [ [ { "node": "Read issues",   "type": "main", "index": 0 } ] ] },
+    "Read issues":   { "main": [ [ { "node": "Read comments", "type": "main", "index": 0 } ] ] },
+    "Read comments": { "main": [ [ { "node": "Build reopen",  "type": "main", "index": 0 } ] ] },
+    "Build reopen":   { "main": [ [
+      { "node": "Update issue", "type": "main", "index": 0 },
+      { "node": "Has comment?", "type": "main", "index": 0 }
+    ] ] },
+    "Has comment?": { "main": [
+      [ { "node": "Append comment", "type": "main", "index": 0 } ],
+      [ { "node": "Respond 200",    "type": "main", "index": 0 } ]
+    ] },
+    "Append comment": { "main": [ [ { "node": "Respond 200", "type": "main", "index": 0 } ] ] },
+    "Update issue":   { "main": [ [] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}

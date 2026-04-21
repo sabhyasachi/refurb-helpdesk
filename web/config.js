@@ -4,7 +4,7 @@
 window.CONFIG = {
   // Example: "https://n8n.spinny.internal/webhook"
   // Leave empty string to run in "offline" mode (uses seed data from window.__SEED__).
-  N8N_BASE: "",
+  N8N_BASE: "https://n8n-xtdwg-u30560.vm.elestio.app/webhook",
 
   // How often to re-fetch the issue-detail screen while it's open.
   // 30s keeps us safely under Google Sheets API rate limits.

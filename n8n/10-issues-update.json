@@ -1,0 +1,99 @@
+{
+  "name": "RH · issues-update",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "issues-update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "j0000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "rh-issues-update"
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issues", "cachedResultName": "issues" },
+        "options": {}
+      },
+      "id": "j0000001-0002-0002-0002-000000000002",
+      "name": "Read issues",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst { issue_id, patch = {}, scope = {} } = body;\n\nif (!issue_id) throw new Error('MISSING_ISSUE_ID');\n\nconst issues = $input.all().map(x => x.json);\nconst issue = issues.find(i => i.issue_id === issue_id);\nif (!issue) throw new Error('ISSUE_NOT_FOUND');\n\n// Role-based field permissions\nconst isAdmin   = scope.role === 'admin';\nconst isManager = scope.role === 'manager';\nconst isRaiser  = scope.user_id === issue.raised_by;\n\nif (!isAdmin && !isManager && !isRaiser) {\n  throw new Error('FORBIDDEN');\n}\n\n// Only admins/managers can change status, assign, set priority\nconst merged = {\n  ...issue,\n  title:       patch.title       ?? issue.title,\n  description: patch.description ?? issue.description,\n  category:    patch.category    ?? issue.category,\n  updated_at:  new Date().toISOString(),\n};\n\nif (isAdmin || isManager) {\n  merged.priority    = patch.priority    ?? issue.priority;\n  merged.assigned_to = patch.assigned_to !== undefined ? patch.assigned_to : issue.assigned_to;\n  if (patch.status) {\n    const allowed = ['open', 'in_progress', 'resolved', 'closed'];\n    if (!allowed.includes(patch.status)) throw new Error('INVALID_STATUS');\n    merged.status = patch.status;\n  }\n}\n\nreturn [{ json: merged }];"
+      },
+      "id": "j0000001-0003-0003-0003-000000000003",
+      "name": "Merge patch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issues", "cachedResultName": "issues" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": ["issue_id"]
+        },
+        "options": {}
+      },
+      "id": "j0000001-0004-0004-0004-000000000004",
+      "name": "Update row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ issue: $json }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "j0000001-0005-0005-0005-000000000005",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook":     { "main": [ [ { "node": "Read issues", "type": "main", "index": 0 } ] ] },
+    "Read issues": { "main": [ [ { "node": "Merge patch", "type": "main", "index": 0 } ] ] },
+    "Merge patch": { "main": [ [ { "node": "Update row",  "type": "main", "index": 0 } ] ] },
+    "Update row":  { "main": [ [ { "node": "Respond 200", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}

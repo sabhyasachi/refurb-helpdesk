@@ -1,0 +1,148 @@
+{
+  "name": "RH · comments-create",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "comments-create",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "l2000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "rh-comments-create"
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issue_comments", "cachedResultName": "issue_comments" },
+        "options": {}
+      },
+      "id": "l2000001-0002-0002-0002-000000000002",
+      "name": "Read comments",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issues", "cachedResultName": "issues" },
+        "options": {}
+      },
+      "id": "l2000001-0003-0003-0003-000000000003",
+      "name": "Read issues",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 380],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst { issue_id, author_id, body: text, is_internal = false, scope = {} } = body;\n\nif (!issue_id)  throw new Error('MISSING_ISSUE_ID');\nif (!author_id) throw new Error('MISSING_AUTHOR_ID');\nif (!text || !String(text).trim()) throw new Error('EMPTY_BODY');\n\nconst issues   = $('Read issues').all().map(x => x.json);\nconst comments = $('Read comments').all().map(x => x.json);\n\nconst issue = issues.find(i => i.issue_id === issue_id);\nif (!issue) throw new Error('ISSUE_NOT_FOUND');\n\n// Block comments on closed issues (unless admin)\nif (issue.status === 'closed' && scope.role !== 'admin') {\n  throw new Error('ISSUE_CLOSED');\n}\n\n// Only admins/managers can post internal notes\nconst internalFlag = (is_internal === true || is_internal === 'true') &&\n                     (scope.role === 'admin' || scope.role === 'manager');\n\n// Generate CMT-NNNN\nconst cNums = comments\n  .map(c => parseInt((c.comment_id || '').replace('CMT-', ''), 10))\n  .filter(n => !isNaN(n));\nconst next = cNums.length ? Math.max(...cNums) + 1 : 1;\nconst comment_id = 'CMT-' + String(next).padStart(4, '0');\n\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  comment_id,\n  issue_id,\n  author_id,\n  body: String(text).trim(),\n  is_internal: internalFlag ? 'TRUE' : 'FALSE',\n  created_at: now,\n}}];"
+      },
+      "id": "l2000001-0004-0004-0004-000000000004",
+      "name": "Build comment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issue_comments", "cachedResultName": "issue_comments" },
+        "columns": {
+          "mappingMode": "autoMapInputData"
+        },
+        "options": {}
+      },
+      "id": "l2000001-0005-0005-0005-000000000005",
+      "name": "Append comment",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [940, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issues", "cachedResultName": "issues" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "issue_id":   "={{ $('Build comment').first().json.issue_id }}",
+            "updated_at": "={{ $('Build comment').first().json.created_at }}"
+          },
+          "matchingColumns": ["issue_id"]
+        },
+        "options": {}
+      },
+      "id": "l2000001-0006-0006-0006-000000000006",
+      "name": "Bump issue updated_at",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [940, 480],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ comment: $('Append comment').first().json }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "l2000001-0007-0007-0007-000000000007",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1160, 300]
+    }
+  ],
+  "connections": {
+    "Webhook":       { "main": [ [ { "node": "Read comments", "type": "main", "index": 0 } ] ] },
+    "Read comments": { "main": [ [ { "node": "Read issues",   "type": "main", "index": 0 } ] ] },
+    "Read issues":   { "main": [ [ { "node": "Build comment", "type": "main", "index": 0 } ] ] },
+    "Build comment":        { "main": [ [
+      { "node": "Append comment",        "type": "main", "index": 0 },
+      { "node": "Bump issue updated_at", "type": "main", "index": 0 }
+    ] ] },
+    "Append comment":        { "main": [ [ { "node": "Respond 200", "type": "main", "index": 0 } ] ] },
+    "Bump issue updated_at": { "main": [ [] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}

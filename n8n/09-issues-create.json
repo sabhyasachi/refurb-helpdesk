@@ -1,0 +1,117 @@
+{
+  "name": "RH · issues-create",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "issues-create",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "i9000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "rh-issues-create"
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issues", "cachedResultName": "issues" },
+        "options": {}
+      },
+      "id": "i9000001-0002-0002-0002-000000000002",
+      "name": "Read issues",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "users", "cachedResultName": "users" },
+        "options": {}
+      },
+      "id": "i9000001-0003-0003-0003-000000000003",
+      "name": "Read users",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 380],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst { title, description, category, priority, raised_by, workshop_id } = body;\n\nif (!title || !title.trim()) throw new Error('MISSING_TITLE');\nif (!raised_by) throw new Error('MISSING_RAISED_BY');\nif (!workshop_id) throw new Error('MISSING_WORKSHOP_ID');\n\nconst issues = $('Read issues').all().map(x => x.json);\nconst users  = $('Read users').all().map(x => x.json);\n\nconst raiser = users.find(u => u.user_id === raised_by);\nif (!raiser) throw new Error('RAISER_NOT_FOUND');\n\n// Generate ISS-NNN style ID\nconst nums = issues\n  .map(i => parseInt((i.issue_id || '').replace('ISS-', ''), 10))\n  .filter(n => !isNaN(n));\nconst next = nums.length ? Math.max(...nums) + 1 : 1;\nconst issue_id = 'ISS-' + String(next).padStart(3, '0');\n\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  issue_id,\n  title: title.trim(),\n  description: (description || '').trim(),\n  category: category || 'other',\n  priority: priority || 'medium',\n  status: 'open',\n  raised_by,\n  workshop_id,\n  assigned_to: '',\n  ai_triage_note: '',\n  created_at: now,\n  updated_at: now,\n}}];"
+      },
+      "id": "i9000001-0004-0004-0004-000000000004",
+      "name": "Build row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "issues", "cachedResultName": "issues" },
+        "columns": {
+          "mappingMode": "autoMapInputData"
+        },
+        "options": {}
+      },
+      "id": "i9000001-0005-0005-0005-000000000005",
+      "name": "Append row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [940, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ issue: $json }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "i9000001-0006-0006-0006-000000000006",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1160, 300]
+    }
+  ],
+  "connections": {
+    "Webhook":    { "main": [ [ { "node": "Read issues", "type": "main", "index": 0 } ] ] },
+    "Read issues":{ "main": [ [ { "node": "Read users",  "type": "main", "index": 0 } ] ] },
+    "Read users": { "main": [ [ { "node": "Build row",   "type": "main", "index": 0 } ] ] },
+    "Build row":  { "main": [ [ { "node": "Append row",  "type": "main", "index": 0 } ] ] },
+    "Append row": { "main": [ [ { "node": "Respond 200", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}

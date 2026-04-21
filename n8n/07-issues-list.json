@@ -1,0 +1,117 @@
+{
+  "name": "RH · issues-list",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "issues-list",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "g7000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 400],
+      "webhookId": "rh-issues-list"
+    },
+    {
+      "parameters": {
+        "documentId": "={{ $vars.SHEET_ID }}",
+        "sheetName": "issues",
+        "options": {}
+      },
+      "id": "g7000001-0002-0002-0002-000000000002",
+      "name": "Read issues",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 250],
+      "credentials": {
+        "googleApi": {
+          "id": "REPLACE_WITH_GOOGLE_SA_CRED_ID",
+          "name": "RefurbHelpdesk SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": "={{ $vars.SHEET_ID }}",
+        "sheetName": "issue_comments",
+        "options": {}
+      },
+      "id": "g7000001-0003-0003-0003-000000000003",
+      "name": "Read comments",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 400],
+      "credentials": {
+        "googleApi": {
+          "id": "REPLACE_WITH_GOOGLE_SA_CRED_ID",
+          "name": "RefurbHelpdesk SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": "={{ $vars.SHEET_ID }}",
+        "sheetName": "issue_attachments",
+        "options": {}
+      },
+      "id": "g7000001-0004-0004-0004-000000000004",
+      "name": "Read attachments",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 550],
+      "credentials": {
+        "googleApi": {
+          "id": "REPLACE_WITH_GOOGLE_SA_CRED_ID",
+          "name": "RefurbHelpdesk SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst { scope = {}, filters = {}, limit = 200 } = body;\n\nconst issues      = $('Read issues').all().map(x => x.json);\nconst comments    = $('Read comments').all().map(x => x.json);\nconst attachments = $('Read attachments').all().map(x => x.json);\n\nconst cByIssue = {};\nfor (const c of comments) { (cByIssue[c.issue_id] ||= []).push(c); }\nconst aByIssue = {};\nfor (const a of attachments) { (aByIssue[a.issue_id] ||= []).push(a); }\n\nlet rows = issues;\n\nif (scope.role === 'workshop')     rows = rows.filter(i => i.raised_by === scope.user_id);\nelse if (scope.role === 'manager') rows = rows.filter(i => i.workshop_id === scope.workshop_id);\n\nif (Array.isArray(filters.status) && filters.status.length) rows = rows.filter(i => filters.status.includes(i.status));\nif (filters.workshop_id)  rows = rows.filter(i => i.workshop_id === filters.workshop_id);\nif (filters.raised_by)    rows = rows.filter(i => i.raised_by === filters.raised_by);\nif (filters.assigned_to)  rows = rows.filter(i => i.assigned_to === filters.assigned_to);\nif (filters.category)     rows = rows.filter(i => i.category === filters.category);\nif (filters.priority)     rows = rows.filter(i => i.priority === filters.priority);\nif (filters.search) {\n  const q = String(filters.search).toLowerCase();\n  rows = rows.filter(i => (i.title || '').toLowerCase().includes(q) || (i.issue_id || '').toLowerCase().includes(q));\n}\n\nrows = rows\n  .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))\n  .slice(0, limit)\n  .map(i => {\n    const { ai_triage_note, ...rest } = i;\n    return {\n      ...rest,\n      comments_count: (cByIssue[i.issue_id] || []).length,\n      attachments_count: (aByIssue[i.issue_id] || []).length,\n    };\n  });\n\nreturn [{ json: { issues: rows, total: rows.length } }];"
+      },
+      "id": "g7000001-0005-0005-0005-000000000005",
+      "name": "Filter + shape",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "g7000001-0006-0006-0006-000000000006",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [940, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [ [
+      { "node": "Read issues",      "type": "main", "index": 0 },
+      { "node": "Read comments",    "type": "main", "index": 0 },
+      { "node": "Read attachments", "type": "main", "index": 0 }
+    ] ] },
+    "Read issues":      { "main": [ [ { "node": "Filter + shape", "type": "main", "index": 0 } ] ] },
+    "Read comments":    { "main": [ [ { "node": "Filter + shape", "type": "main", "index": 0 } ] ] },
+    "Read attachments": { "main": [ [ { "node": "Filter + shape", "type": "main", "index": 0 } ] ] },
+    "Filter + shape":   { "main": [ [ { "node": "Respond",        "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}
