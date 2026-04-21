@@ -45,12 +45,14 @@
 
   <!-- PWA utility button (mobile + standalone only) -->
   <style>
-    #pwa-fab { position: fixed; right: 12px; bottom: 12px; z-index: 9999; display: none; }
+    #pwa-fab { position: fixed; left: auto; right: 12px; top: auto; bottom: 12px; z-index: 9999; display: none; touch-action: none; }
     #pwa-fab button.pwa-toggle {
       width: 36px; height: 36px; border-radius: 50%; border: none;
       background: rgba(17,24,39,0.75); color: #fff; font-size: 16px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: grab;
+      touch-action: none; user-select: none;
     }
+    #pwa-fab button.pwa-toggle.dragging { cursor: grabbing; }
     #pwa-fab .pwa-menu {
       position: absolute; right: 0; bottom: 44px;
       background: #fff; border: 1px solid #E5E7EB; border-radius: 10px;
@@ -77,10 +79,69 @@
   <script>
     (function () {
       let deferredPrompt = null;
+      const fab     = document.getElementById('pwa-fab');
       const toggle  = document.getElementById('pwa-toggle');
       const menu    = document.getElementById('pwa-menu');
       const install = document.getElementById('pwa-install');
       const clear   = document.getElementById('pwa-clear');
+
+      // ---- Draggable FAB (position persisted) ----
+      const POS_KEY = 'pwa_fab_pos_v1';
+      const applyPos = (x, y) => {
+        const pad = 4;
+        const w = fab.offsetWidth || 36, h = fab.offsetHeight || 36;
+        x = Math.max(pad, Math.min(window.innerWidth  - w - pad, x));
+        y = Math.max(pad, Math.min(window.innerHeight - h - pad, y));
+        fab.style.left = x + 'px';
+        fab.style.top  = y + 'px';
+        fab.style.right = 'auto';
+        fab.style.bottom = 'auto';
+        // Flip menu upward if near bottom, rightward if near left
+        const menuBelow = y < 200;
+        const menuLeft  = x < 180;
+        menu.style.bottom = menuBelow ? 'auto' : '44px';
+        menu.style.top    = menuBelow ? '44px' : 'auto';
+        menu.style.right  = menuLeft  ? 'auto' : '0';
+        menu.style.left   = menuLeft  ? '0'    : 'auto';
+      };
+      try {
+        const saved = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+        if (saved && typeof saved.x === 'number') {
+          requestAnimationFrame(() => applyPos(saved.x, saved.y));
+        }
+      } catch (e) {}
+      window.addEventListener('resize', () => {
+        const r = fab.getBoundingClientRect();
+        if (fab.style.left) applyPos(r.left, r.top);
+      });
+
+      let drag = null;
+      toggle.addEventListener('pointerdown', (e) => {
+        const r = fab.getBoundingClientRect();
+        drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false, startX: e.clientX, startY: e.clientY };
+        toggle.setPointerCapture(e.pointerId);
+        toggle.classList.add('dragging');
+      });
+      toggle.addEventListener('pointermove', (e) => {
+        if (!drag) return;
+        if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 5) return;
+        drag.moved = true;
+        applyPos(e.clientX - drag.dx, e.clientY - drag.dy);
+      });
+      const endDrag = (e) => {
+        if (!drag) return;
+        toggle.classList.remove('dragging');
+        try { toggle.releasePointerCapture(e.pointerId); } catch (err) {}
+        if (drag.moved) {
+          const r = fab.getBoundingClientRect();
+          try { localStorage.setItem(POS_KEY, JSON.stringify({ x: r.left, y: r.top })); } catch (err) {}
+        }
+        const wasDragged = drag.moved;
+        drag = null;
+        if (!wasDragged) menu.classList.toggle('open');
+      };
+      toggle.addEventListener('pointerup', endDrag);
+      toggle.addEventListener('pointercancel', endDrag);
 
       window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
@@ -94,11 +155,10 @@
         install.textContent = 'Installed';
       });
 
-      toggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        menu.classList.toggle('open');
+      toggle.addEventListener('click', (e) => e.stopPropagation());
+      document.addEventListener('click', (e) => {
+        if (!fab.contains(e.target)) menu.classList.remove('open');
       });
-      document.addEventListener('click', () => menu.classList.remove('open'));
 
       install.addEventListener('click', async () => {
         menu.classList.remove('open');
