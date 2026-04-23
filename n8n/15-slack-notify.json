@@ -1,0 +1,87 @@
+{
+  "name": "RH · slack-notify",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-notify",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "k1000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "rh-slack-notify"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst {\n  event = 'issue_created',\n  issue_id = '',\n  title = '',\n  description = '',\n  category = '',\n  raiser_name = '',\n  workshop_label = '',\n  priority = '',\n  status = '',\n  comment_body = '',\n  actor_name = '',\n  attachments = [],\n  channel_id,\n  custom_text,\n  thread_ts,\n} = body;\n\nconst APP_BASE = 'https://sabhyasachi.github.io/refurb-helpdesk';\nconst DEFAULT_CHANNEL = 'C0AUNBH7J77';\nconst link = issue_id ? `${APP_BASE}/#/issues/${issue_id}` : APP_BASE;\n\nconst isImg = (u = '') => /\\.(png|jpe?g|gif|webp)(\\?|$)/i.test(u);\nconst shorten = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : (s || ''));\n\nconst prioEmoji = {\n  urgent: '🔴', high: '🟠', medium: '🟡', low: '🟢',\n}[String(priority).toLowerCase()] || '⚪';\n\n// Title varies by event\nlet headerText;\nif (event === 'issue_created')             headerText = `🛠️ New issue ${issue_id}`;\nelse if (event === 'issue_status_changed') headerText = `🔄 ${issue_id} → ${status}`;\nelse if (event === 'issue_reopened')       headerText = `♻️ ${issue_id} reopened`;\nelse if (event === 'comment_added')        headerText = `💬 New comment on ${issue_id}`;\nelse if (event === 'issue_assigned')       headerText = `👤 ${issue_id} assigned`;\nelse                                       headerText = `📣 ${issue_id || 'Update'}`;\n\nconst specLine = [\n  raiser_name && `Raised by *${raiser_name}*`,\n  workshop_label,\n  category,\n  priority && `${prioEmoji} *${String(priority).toUpperCase()}*`,\n  status && `status: *${status}*`,\n].filter(Boolean).join(' · ');\n\nconst blocks = [];\n\nblocks.push({ type: 'header', text: { type: 'plain_text', text: shorten(`${headerText}${title ? ' — ' + title : ''}`, 150), emoji: true } });\nif (specLine) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: specLine }] });\n\nif (event === 'comment_added' && comment_body) {\n  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*${actor_name || 'Someone'} wrote:*\\n> ${shorten(comment_body, 2500).replace(/\\n/g, '\\n> ')}` } });\n  if (title) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `on: *${title}*` }] });\n} else if (description) {\n  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Description*\\n${shorten(description, 2800)}` } });\n}\n\n// Evidence\nconst imgs = (attachments || []).filter(a => a && (a.mime || '').startsWith('image/') || isImg(a && a.url));\nconst files = (attachments || []).filter(a => a && !(imgs.includes(a)));\nif (imgs.length) {\n  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Evidence* (${(attachments||[]).length} file${(attachments||[]).length>1?'s':''})` } });\n  imgs.slice(0, 4).forEach(a => {\n    blocks.push({ type: 'image', image_url: a.url, alt_text: a.name || 'evidence' });\n  });\n}\nif (files.length) {\n  const list = files.slice(0, 8).map(a => `• <${a.url}|${a.name || 'file'}>`).join('\\n');\n  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: (imgs.length ? '' : '*Evidence*\\n') + list } });\n}\n\n// Actions — only for \"live\" issues (not when already closed)\nconst statusLower = String(status).toLowerCase();\nconst showClose = event !== 'issue_status_changed' || (statusLower !== 'closed' && statusLower !== 'resolved');\nconst elements = [];\nif (issue_id && showClose) {\n  elements.push({\n    type: 'button',\n    text: { type: 'plain_text', text: 'Mark as closed', emoji: true },\n    style: 'primary',\n    action_id: 'close_issue',\n    value: issue_id,\n    confirm: {\n      title: { type: 'plain_text', text: 'Close this issue?' },\n      text:  { type: 'mrkdwn', text: `Close *${issue_id}* — ${shorten(title, 80)}` },\n      confirm: { type: 'plain_text', text: 'Close it' },\n      deny:    { type: 'plain_text', text: 'Cancel' },\n    },\n  });\n}\nelements.push({ type: 'button', text: { type: 'plain_text', text: 'Open in app', emoji: true }, url: link, action_id: 'open_app' });\nblocks.push({ type: 'actions', elements });\n\n// Fallback text for notifications\nconst fallback = custom_text || `${headerText} — ${title}`.trim();\n\nreturn [{ json: {\n  channel: channel_id || DEFAULT_CHANNEL,\n  text: fallback,\n  blocks,\n  thread_ts: thread_ts || undefined,\n}}];"
+      },
+      "id": "k1000001-0002-0002-0002-000000000002",
+      "name": "Build blocks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json; charset=utf-8" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: $json.text, blocks: $json.blocks, thread_ts: $json.thread_ts, unfurl_links: false, unfurl_media: false }) }}",
+        "options": {}
+      },
+      "id": "k1000001-0003-0003-0003-000000000003",
+      "name": "Slack postMessage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_SLACK_CRED_ID",
+          "name": "Slack account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: $json.ok === true, ts: $json.ts || null, channel: $json.channel || null, error: $json.error || null }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "k1000001-0004-0004-0004-000000000004",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook":          { "main": [ [ { "node": "Build blocks",     "type": "main", "index": 0 } ] ] },
+    "Build blocks":     { "main": [ [ { "node": "Slack postMessage","type": "main", "index": 0 } ] ] },
+    "Slack postMessage":{ "main": [ [ { "node": "Respond 200",      "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}

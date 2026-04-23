@@ -152,16 +152,27 @@ function MobileIssues({ user, issues, onNav, onOpenIssue }) {
   );
 }
 
+// Urgency labels shown to technicians — friendlier than "Urgent/High/Normal/Low".
+// Priority IDs stay p0-p3 internally for the admin UI + filters + DB.
+const URGENCY_LABELS = {
+  p0: 'work is stopped',
+  p1: 'blocking me',
+  p2: 'can wait a bit',
+  p3: 'just asking',
+};
+
+// Only these two categories are offered on the raise form. Admin UI still knows about
+// the other categories if an older ticket has them.
+const RAISE_CATEGORIES = ['bug', 'other'];
+
 function MobileNew({ user, onCancel, onSubmit }) {
-  const [step, setStep] = React.useState(0);
-  const [draft, setDraft] = React.useState({ category: null, title: '', description: '', priority: null, attachments: [] });
+  const [draft, setDraft] = React.useState({ category: null, description: '', priority: null, attachments: [] });
   const [busy, setBusy] = React.useState(false);
   const fileRef = React.useRef();
   const update = (patch) => setDraft(d => ({ ...d, ...patch }));
 
-  const canContinue =
-    (step === 0 && draft.category && draft.title.trim().length > 2) ||
-    (step === 1 && draft.priority);
+  // Description required (≥10 chars) + priority required. Category is optional.
+  const canSubmit = draft.description.trim().length >= 10 && !!draft.priority;
 
   const pickFiles = (e) => {
     const files = Array.from(e.target.files || []);
@@ -172,102 +183,122 @@ function MobileNew({ user, onCancel, onSubmit }) {
     e.target.value = '';
   };
 
-  const goNext = async () => {
-    if (step < 1) { setStep(1); return; }
-    if (busy) return;
+  const submit = async () => {
+    if (!canSubmit || busy) return;
     setBusy(true);
     try {
-      await onSubmit(draft);
+      // Auto-generate a short title from the description (first sentence or first 60 chars).
+      // Kept in DB for AI summarisation + quick scanning in the admin list.
+      const desc = draft.description.trim();
+      const firstLine = desc.split(/[\n.?!]/)[0].trim();
+      const title = (firstLine.length >= 3 ? firstLine : desc).slice(0, 80);
+      await onSubmit({
+        category: draft.category || 'other',
+        title,
+        description: desc,
+        priority: draft.priority,
+        attachments: draft.attachments,
+      });
     } finally {
       setBusy(false);
     }
   };
 
+  const cats = window.CATEGORIES.filter(c => RAISE_CATEGORIES.includes(c.id));
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#F7F8FA' }}>
       <div style={{ paddingTop: 'max(12px, env(safe-area-inset-top))', paddingBottom: 12, paddingLeft: 16, paddingRight: 16, background: 'white', borderBottom: '1px solid #EEF0F3', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={step === 0 ? onCancel : () => setStep(0)} style={{ background: '#F3F4F6', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name={step === 0 ? 'x' : 'chevronLeft'} size={20} color="#111827" />
+        <button onClick={onCancel} style={{ background: '#F3F4F6', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="x" size={20} color="#111827" />
         </button>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6 }}>Step {step + 1} of 2</div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{step === 0 ? "What happened?" : 'Urgency & submit'}</div>
+        <div style={{ flex: 1, fontSize: 18, fontWeight: 700, letterSpacing: -0.2 }}>Raise an issue</div>
+      </div>
+
+      <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+        {/* 1. Description — required, primary field */}
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+          What's going on? <span style={{ color: '#DC2626' }}>*</span>
+        </label>
+        <textarea
+          autoFocus
+          value={draft.description}
+          onChange={e => update({ description: e.target.value })}
+          placeholder="Describe what happened. When did it start, what were you doing?"
+          rows={5}
+          style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid #E5E7EB', borderRadius: 12, padding: '14px 16px', fontSize: 16, outline: 'none', resize: 'vertical', lineHeight: 1.5, marginBottom: 4 }}
+        />
+        <div style={{ fontSize: 11, color: draft.description.trim().length < 10 ? '#DC2626' : '#9CA3AF', marginBottom: 18, textAlign: 'right' }}>
+          {draft.description.trim().length < 10 ? `${10 - draft.description.trim().length} more characters needed` : '✓ looks good'}
+        </div>
+
+        {/* 2. Attachments — optional */}
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+          Photo / voice / PDF <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(optional)</span>
+        </label>
+        <input ref={fileRef} type="file" accept={window.CONFIG.ATTACHMENT_ACCEPT} multiple style={{ display: 'none' }} onChange={pickFiles} />
+        <button onClick={() => fileRef.current?.click()} style={{ width: '100%', border: '1.5px dashed #D1D5DB', background: 'white', borderRadius: 12, padding: '14px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#374151', fontWeight: 600, fontSize: 14, marginBottom: 10 }}>
+          <Icon name="paperclip" size={18} color="#6B7280" />
+          Add photo, voice note, or PDF
+        </button>
+        {draft.attachments.length > 0 && (
+          <div style={{ marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {draft.attachments.map((a, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#F3F4F6', borderRadius: 8 }}>
+                <Icon name="paperclip" size={14} color="#6B7280" />
+                <div style={{ flex: 1, fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                <button onClick={() => update({ attachments: draft.attachments.filter((_, j) => j !== i) })} style={{ padding: 2 }}>
+                  <Icon name="x" size={14} color="#9CA3AF" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {draft.attachments.length === 0 && <div style={{ height: 18 }} />}
+
+        {/* 3. Type — optional, bug or other */}
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+          Type <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(optional)</span>
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20 }}>
+          {cats.map(c => {
+            const selected = draft.category === c.id;
+            return (
+              <button key={c.id} onClick={() => update({ category: selected ? null : c.id })} style={{ border: selected ? `2px solid ${c.color}` : '1.5px solid #E5E7EB', background: 'white', borderRadius: 12, padding: '12px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: selected ? `0 4px 12px ${c.color}22` : 'none' }}>
+                <div style={{ fontSize: 20 }}>{c.icon}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{c.short}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 4. Urgency — required */}
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+          How urgent? <span style={{ color: '#DC2626' }}>*</span>
+        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+          {window.PRIORITIES.map(p => {
+            const selected = draft.priority === p.id;
+            const label = URGENCY_LABELS[p.id] || p.short;
+            return (
+              <button key={p.id} onClick={() => update({ priority: p.id })} style={{ border: selected ? `2px solid ${p.color}` : '1.5px solid #E5E7EB', background: 'white', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: selected ? `0 4px 12px ${p.color}22` : 'none' }}>
+                <div style={{ width: 8, height: 32, borderRadius: 3, background: p.color, flexShrink: 0 }} />
+                <div style={{ flex: 1, textAlign: 'left', fontSize: 16, fontWeight: 600, color: '#111827', textTransform: 'lowercase' }}>{label}</div>
+                {selected && (
+                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: p.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="check" size={12} color="white" strokeWidth={3} />
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
-      <div style={{ height: 3, background: '#EEF0F3' }}>
-        <div style={{ height: '100%', width: `${((step + 1) / 2) * 100}%`, background: '#111827', transition: 'width 0.25s ease' }} />
-      </div>
 
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {step === 0 && (
-          <div style={{ padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 10 }}>Pick a type</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20 }}>
-              {window.CATEGORIES.map(c => {
-                const selected = draft.category === c.id;
-                return (
-                  <button key={c.id} onClick={() => update({ category: c.id })} style={{ border: selected ? `2px solid ${c.color}` : '2px solid transparent', background: 'white', borderRadius: 14, padding: '14px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, boxShadow: selected ? `0 4px 12px ${c.color}22` : '0 1px 2px rgba(0,0,0,0.04)' }}>
-                    <div style={{ fontSize: 26 }}>{c.icon}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', textAlign: 'center' }}>{c.short}</div>
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8 }}>In one line, what's wrong?</div>
-            <input value={draft.title} onChange={e => update({ title: e.target.value })} placeholder="e.g. Paint booth fan making noise" style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid #E5E7EB', borderRadius: 12, padding: '14px 16px', fontSize: 16, outline: 'none', marginBottom: 16 }} />
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8 }}>More details <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(optional)</span></div>
-            <textarea value={draft.description} onChange={e => update({ description: e.target.value })} placeholder="When did it start? What were you doing?" rows={3} style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid #E5E7EB', borderRadius: 12, padding: '14px 16px', fontSize: 15, outline: 'none', resize: 'vertical', lineHeight: 1.5, marginBottom: 16 }} />
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8 }}>Photo / voice <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(optional)</span></div>
-            <input ref={fileRef} type="file" accept={window.CONFIG.ATTACHMENT_ACCEPT} multiple style={{ display: 'none' }} onChange={pickFiles} />
-            <button onClick={() => fileRef.current?.click()} style={{ width: '100%', border: '1.5px dashed #D1D5DB', background: 'white', borderRadius: 12, padding: '14px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#374151', fontWeight: 600, fontSize: 14 }}>
-              <Icon name="paperclip" size={18} color="#6B7280" />
-              Add photo / voice / PDF
-            </button>
-            {draft.attachments.length > 0 && (
-              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {draft.attachments.map((a, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#F3F4F6', borderRadius: 8 }}>
-                    <Icon name="paperclip" size={14} color="#6B7280" />
-                    <div style={{ flex: 1, fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
-                    <button onClick={() => update({ attachments: draft.attachments.filter((_, j) => j !== i) })} style={{ padding: 2 }}>
-                      <Icon name="x" size={14} color="#9CA3AF" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        {step === 1 && (
-          <div style={{ padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 10 }}>How urgent?</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-              {window.PRIORITIES.map(p => {
-                const selected = draft.priority === p.id;
-                return (
-                  <button key={p.id} onClick={() => update({ priority: p.id })} style={{ border: selected ? `2px solid ${p.color}` : '2px solid transparent', background: 'white', borderRadius: 14, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: selected ? `0 4px 12px ${p.color}22` : '0 1px 2px rgba(0,0,0,0.04)' }}>
-                    <div style={{ width: 10, height: 36, borderRadius: 3, background: p.color, flexShrink: 0 }} />
-                    <div style={{ flex: 1, textAlign: 'left' }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: p.color }}>{p.short}</div>
-                      <div style={{ fontSize: 12, color: '#6B7280' }}>{p.label.split('—')[1]?.trim()}</div>
-                    </div>
-                    {selected && (
-                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: p.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Icon name="check" size={12} color="white" strokeWidth={3} />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div style={{ padding: '12px 16px 28px', background: 'white', borderTop: '1px solid #EEF0F3' }}>
-        <button onClick={goNext} disabled={!canContinue || busy} style={{ width: '100%', background: (canContinue && !busy) ? '#111827' : '#E5E7EB', color: (canContinue && !busy) ? 'white' : '#9CA3AF', padding: 16, borderRadius: 14, fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          {busy ? 'Submitting…' : (step === 1 ? 'Submit issue' : 'Continue')}
-          {!busy && <Icon name={step === 1 ? 'send' : 'arrowRight'} size={18} color={canContinue ? 'white' : '#9CA3AF'} />}
+      <div style={{ padding: '12px 16px max(12px, env(safe-area-inset-bottom))', background: 'white', borderTop: '1px solid #EEF0F3' }}>
+        <button onClick={submit} disabled={!canSubmit || busy} style={{ width: '100%', background: (canSubmit && !busy) ? '#111827' : '#E5E7EB', color: (canSubmit && !busy) ? 'white' : '#9CA3AF', padding: 16, borderRadius: 14, fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {busy ? 'Submitting…' : 'Submit issue'}
+          {!busy && <Icon name="send" size={18} color={canSubmit ? 'white' : '#9CA3AF'} />}
         </button>
       </div>
     </div>

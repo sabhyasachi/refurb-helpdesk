@@ -150,64 +150,230 @@ function FilterSelect({ label, value, onChange, options }) {
   );
 }
 
-function IssuesList({ user, issues, onOpenIssue }) {
-  const [search, setSearch] = React.useState('');
-  const [status, setStatus] = React.useState(null);
-  const [cityId, setCityId] = React.useState(null);
-  const [workshopId, setWorkshopId] = React.useState(null);
-  const [assigneeFilter, setAssigneeFilter] = React.useState(null);
-  const [raiserFilter, setRaiserFilter] = React.useState(null);
+const SORT_OPTIONS = [
+  { id: 'updated_desc',  label: 'Recently updated',     sort: (a, b) => new Date(b.updated_at) - new Date(a.updated_at) },
+  { id: 'created_desc',  label: 'Newest first',         sort: (a, b) => new Date(b.created_at) - new Date(a.created_at) },
+  { id: 'created_asc',   label: 'Oldest first',         sort: (a, b) => new Date(a.created_at) - new Date(b.created_at) },
+  { id: 'priority',      label: 'Most urgent first',    sort: (a, b) => (a.priority || 'p9').localeCompare(b.priority || 'p9') },
+  { id: 'status',        label: 'Status (open → done)', sort: (a, b) => ['open','reopened','assigned','in_progress','resolved'].indexOf(a.status) - ['open','reopened','assigned','in_progress','resolved'].indexOf(b.status) },
+];
 
-  const visible = issues.filter(i => {
+const EMPTY_FILTERS = {
+  search: '',
+  status: [],
+  priority: [],
+  category: [],
+  cityId: null,
+  workshopId: null,
+  assignee: null,   // admin — also accepts '__unassigned__'
+  raiser: null,     // manager
+};
+
+function countActive(f) {
+  let n = 0;
+  if (f.search.trim()) n++;
+  if (f.status.length) n++;
+  if (f.priority.length) n++;
+  if (f.category.length) n++;
+  if (f.cityId) n++;
+  if (f.workshopId) n++;
+  if (f.assignee) n++;
+  if (f.raiser) n++;
+  return n;
+}
+
+function FilterModal({ user, filters, onChange, onClose, onClear }) {
+  const [f, setF] = React.useState(filters);
+  const set = (patch) => setF(prev => ({ ...prev, ...patch }));
+  const toggle = (key, val) => {
+    const arr = f[key];
+    set({ [key]: arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val] });
+  };
+  const workshopsForCity = f.cityId ? window.WORKSHOPS.filter(w => w.city_id === f.cityId) : window.WORKSHOPS;
+  const pocs = Object.values(window.USERS_BY_ID).filter(u => u.role === 'poc');
+  const technicians = Object.values(window.USERS_BY_ID).filter(u => (user.role === 'manager' ? u.workshop_id === user.workshop_id : true) && u.role === 'workshop');
+
+  const apply = () => { onChange(f); onClose(); };
+  const reset = () => { setF(EMPTY_FILTERS); };
+
+  const Chip = ({ active, color, bg, onClick, children }) => (
+    <button onClick={onClick} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: active ? `1.5px solid ${color}` : '1px solid #E5E7EB', background: active ? bg : 'white', color: active ? color : '#374151' }}>{children}</button>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 'min(520px, calc(100vw - 32px))', maxHeight: '90vh', overflow: 'auto', background: 'white', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ padding: 20, borderBottom: '1px solid #F3F4F6', display: 'flex', alignItems: 'center' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, flex: 1 }}>Filter issues</div>
+          <button onClick={onClose}><Icon name="x" size={18} color="#6B7280" /></button>
+        </div>
+
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Search */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Search</div>
+            <input value={f.search} onChange={e => set({ search: e.target.value })} placeholder="ID or title…" style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 12px', fontSize: 14, outline: 'none' }} />
+          </div>
+
+          {/* Status */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Status</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {window.STATUSES.map(s => (
+                <Chip key={s.id} active={f.status.includes(s.id)} color={s.color} bg={s.bg} onClick={() => toggle('status', s.id)}>{s.label}</Chip>
+              ))}
+            </div>
+          </div>
+
+          {/* Priority */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Urgency</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {window.PRIORITIES.map(p => (
+                <Chip key={p.id} active={f.priority.includes(p.id)} color={p.color} bg={p.bg} onClick={() => toggle('priority', p.id)}>{p.short}</Chip>
+              ))}
+            </div>
+          </div>
+
+          {/* Category */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Type</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {window.CATEGORIES.map(c => (
+                <Chip key={c.id} active={f.category.includes(c.id)} color={c.color} bg={c.color + '18'} onClick={() => toggle('category', c.id)}>{c.icon} {c.short}</Chip>
+              ))}
+            </div>
+          </div>
+
+          {/* City + Workshop (admin) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>City</div>
+              <select value={f.cityId || ''} onChange={e => set({ cityId: e.target.value || null, workshopId: null })} style={{ width: '100%', padding: '9px 10px', border: '1.5px solid #E5E7EB', borderRadius: 10, background: 'white', fontSize: 13 }}>
+                <option value="">Any</option>
+                {window.CITIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+            </div>
+            {user.role === 'admin' && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Workshop</div>
+                <select value={f.workshopId || ''} onChange={e => set({ workshopId: e.target.value || null })} style={{ width: '100%', padding: '9px 10px', border: '1.5px solid #E5E7EB', borderRadius: 10, background: 'white', fontSize: 13 }}>
+                  <option value="">Any</option>
+                  {workshopsForCity.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Assignee or Raiser */}
+          {user.role === 'admin' ? (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Assignee</div>
+              <select value={f.assignee || ''} onChange={e => set({ assignee: e.target.value || null })} style={{ width: '100%', padding: '9px 10px', border: '1.5px solid #E5E7EB', borderRadius: 10, background: 'white', fontSize: 13 }}>
+                <option value="">Any</option>
+                <option value="__unassigned__">⚠ Unassigned</option>
+                {pocs.map(p => <option key={p.user_id} value={p.user_id}>{p.full_name}</option>)}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Raised by</div>
+              <select value={f.raiser || ''} onChange={e => set({ raiser: e.target.value || null })} style={{ width: '100%', padding: '9px 10px', border: '1.5px solid #E5E7EB', borderRadius: 10, background: 'white', fontSize: 13 }}>
+                <option value="">Any</option>
+                {technicians.map(t => <option key={t.user_id} value={t.user_id}>{t.full_name}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: 16, borderTop: '1px solid #F3F4F6', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={reset} style={{ color: '#6B7280', fontSize: 13, fontWeight: 600, padding: '9px 14px' }}>Clear all</button>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={{ color: '#6B7280', fontSize: 13, fontWeight: 600, padding: '9px 14px' }}>Cancel</button>
+          <button onClick={apply} style={{ background: '#111827', color: 'white', padding: '9px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600 }}>Apply</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SortPopover({ current, onPick, onClose }) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+      <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', background: 'white', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.12)', border: '1px solid #E5E7EB', padding: 4, minWidth: 220, left: 'calc(50% - 110px)', top: 150 }}>
+        {SORT_OPTIONS.map(o => (
+          <button key={o.id} onClick={() => { onPick(o.id); onClose(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', borderRadius: 8, textAlign: 'left', fontSize: 13, fontWeight: current === o.id ? 600 : 500, color: current === o.id ? '#111827' : '#374151', background: current === o.id ? '#F3F4F6' : 'transparent' }}>
+            {current === o.id ? <Icon name="check" size={14} color="#16A34A" /> : <span style={{ width: 14 }} />}
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function IssuesList({ user, issues, onOpenIssue }) {
+  const [sortBy, setSortBy] = React.useState('updated_desc');
+  const [sortOpen, setSortOpen] = React.useState(false);
+  const [filterOpen, setFilterOpen] = React.useState(false);
+  const [filters, setFilters] = React.useState(EMPTY_FILTERS);
+
+  const activeCount = countActive(filters);
+
+  let visible = issues.filter(i => {
     if (user.role === 'manager' && i.workshop_id !== user.workshop_id) return false;
-    if (status && i.status !== status) return false;
-    if (cityId) {
+    if (filters.status.length && !filters.status.includes(i.status)) return false;
+    if (filters.priority.length && !filters.priority.includes(i.priority)) return false;
+    if (filters.category.length && !filters.category.includes(i.category)) return false;
+    if (filters.cityId) {
       const ws = lookup(window.WORKSHOPS, i.workshop_id);
-      if (!ws || ws.city_id !== cityId) return false;
+      if (!ws || ws.city_id !== filters.cityId) return false;
     }
-    if (workshopId && i.workshop_id !== workshopId) return false;
-    if (assigneeFilter === '__unassigned__') { if (i.assigned_to) return false; }
-    else if (assigneeFilter && i.assigned_to !== assigneeFilter) return false;
-    if (raiserFilter && i.raised_by !== raiserFilter) return false;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (filters.workshopId && i.workshop_id !== filters.workshopId) return false;
+    if (filters.assignee === '__unassigned__') { if (i.assigned_to) return false; }
+    else if (filters.assignee && i.assigned_to !== filters.assignee) return false;
+    if (filters.raiser && i.raised_by !== filters.raiser) return false;
+    if (filters.search.trim()) {
+      const q = filters.search.trim().toLowerCase();
       if (!i.title.toLowerCase().includes(q) && !i.issue_id.toLowerCase().includes(q)) return false;
     }
     return true;
   });
 
-  const pocs = Object.values(window.USERS_BY_ID).filter(u => u.role === 'poc').map(u => ({ id: u.user_id, label: u.full_name }));
-  const allUsersInScope = Object.values(window.USERS_BY_ID).filter(u => {
-    if (user.role === 'manager') return u.workshop_id === user.workshop_id && u.role === 'workshop';
-    return true;
-  }).map(u => ({ id: u.user_id, label: u.full_name }));
-
-  const workshopsForCity = cityId ? window.WORKSHOPS.filter(w => w.city_id === cityId) : window.WORKSHOPS;
+  const sortFn = (SORT_OPTIONS.find(o => o.id === sortBy) || SORT_OPTIONS[0]).sort;
+  visible = [...visible].sort(sortFn);
+  const sortLabel = (SORT_OPTIONS.find(o => o.id === sortBy) || SORT_OPTIONS[0]).label;
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-        <div style={{ flex: '1 1 240px', position: 'relative' }}>
-          <Icon name="search" size={16} color="#9CA3AF" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by ID or title…" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px 8px 32px', fontSize: 13, background: 'white' }} />
-          <div style={{ position: 'absolute', left: 10, top: 9 }}><Icon name="search" size={16} color="#9CA3AF" /></div>
-        </div>
-        <FilterSelect label="Status"   value={status}        onChange={setStatus}        options={window.STATUSES} />
-        <FilterSelect label="City"     value={cityId}        onChange={v => { setCityId(v); setWorkshopId(null); }} options={window.CITIES} />
-        {user.role === 'admin' && <FilterSelect label="Workshop" value={workshopId}     onChange={setWorkshopId}    options={workshopsForCity} />}
-        {user.role === 'admin' ? (
-          <FilterSelect label="Assignee" value={assigneeFilter} onChange={setAssigneeFilter} options={[{ id: '__unassigned__', label: '⚠ Unassigned' }, ...pocs]} />
-        ) : (
-          <FilterSelect label="Raised by" value={raiserFilter} onChange={setRaiserFilter} options={allUsersInScope} />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={() => setSortOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'white', border: '1px solid #E5E7EB', borderRadius: 10, padding: '9px 14px', fontSize: 13, fontWeight: 600, color: '#374151' }}>
+          <Icon name="list" size={14} color="#6B7280" />
+          Sort: <span style={{ color: '#111827' }}>{sortLabel}</span>
+          <Icon name="chevronDown" size={14} color="#9CA3AF" />
+        </button>
+        <button onClick={() => setFilterOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: activeCount ? '#111827' : 'white', color: activeCount ? 'white' : '#374151', border: '1px solid ' + (activeCount ? '#111827' : '#E5E7EB'), borderRadius: 10, padding: '9px 14px', fontSize: 13, fontWeight: 600 }}>
+          <Icon name="search" size={14} color={activeCount ? 'white' : '#6B7280'} />
+          Filter
+          {activeCount > 0 && <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>{activeCount}</span>}
+        </button>
+        {activeCount > 0 && (
+          <button onClick={() => setFilters(EMPTY_FILTERS)} style={{ color: '#6B7280', fontSize: 12, fontWeight: 600, padding: '9px 8px' }}>Clear all</button>
         )}
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>{visible.length} {visible.length === 1 ? 'issue' : 'issues'}</div>
       </div>
 
       <div style={{ background: 'white', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid #F3F4F6', fontSize: 13, fontWeight: 600, color: '#6B7280' }}>{visible.length} {visible.length === 1 ? 'issue' : 'issues'}</div>
         {visible.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF' }}>No issues match these filters.</div>
+          <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF' }}>
+            {issues.length === 0 ? 'No issues yet.' : 'No issues match these filters.'}
+          </div>
         ) : visible.map(i => <AdminIssueRow key={i.issue_id} issue={i} onClick={() => onOpenIssue(i.issue_id)} />)}
       </div>
+
+      {sortOpen && <SortPopover current={sortBy} onPick={setSortBy} onClose={() => setSortOpen(false)} />}
+      {filterOpen && <FilterModal user={user} filters={filters} onChange={setFilters} onClose={() => setFilterOpen(false)} />}
     </div>
   );
 }

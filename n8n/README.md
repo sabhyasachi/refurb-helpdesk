@@ -27,7 +27,7 @@ If/when you want exportable templates, export after building and commit the `.js
 | 11 | users-update | `/users-update` | Admin edit user |
 | 12 | users-delete | `/users-delete` | Soft-delete user |
 | 13 | attachments-upload | `/attachments-upload` | Drive upload + sheet append |
-| 14 | ai-triage | (internal, no webhook — called by issues-create) | Duplicate detect + auto-reply |
+| 14 |  ply |
 
 ## Shared concepts used throughout
 
