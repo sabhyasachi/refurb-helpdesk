@@ -60,7 +60,12 @@ function StatCard({ label, value, color = '#111827' }) {
 }
 
 function Dashboard({ user, issues, onOpenIssue }) {
-  const scoped = user.role === 'manager' ? issues.filter(i => i.workshop_id === user.workshop_id) : issues;
+  const isPOC = user.role === 'poc';
+  const scoped = isPOC
+    ? issues.filter(i => i.assigned_to === user.user_id)
+    : user.role === 'manager'
+      ? issues.filter(i => i.workshop_id === user.workshop_id)
+      : issues;
   const today = new Date(); today.setHours(0,0,0,0);
   const stats = {
     open:       scoped.filter(i => ['open', 'assigned', 'in_progress', 'reopened'].includes(i.status)).length,
@@ -68,7 +73,13 @@ function Dashboard({ user, issues, onOpenIssue }) {
     urgent:     scoped.filter(i => i.priority === 'p0' && i.status !== 'resolved').length,
     resolved:   scoped.filter(i => i.status === 'resolved' && new Date(i.resolved_at || i.updated_at) >= today).length,
   };
-  const triage = scoped.filter(i => !i.assigned_to && i.status !== 'resolved').slice(0, 10);
+  // POC sees their open assigned tasks; admin/manager see unassigned triage
+  const triage = isPOC
+    ? scoped.filter(i => i.status !== 'resolved').sort((a, b) => {
+        const pri = { p0: 0, p1: 1, p2: 2, p3: 3 };
+        return (pri[a.priority] ?? 9) - (pri[b.priority] ?? 9) || new Date(b.updated_at) - new Date(a.updated_at);
+      }).slice(0, 20)
+    : scoped.filter(i => !i.assigned_to && i.status !== 'resolved').slice(0, 10);
 
   const byCat = window.CATEGORIES.map(c => ({
     ...c,
@@ -79,16 +90,17 @@ function Dashboard({ user, issues, onOpenIssue }) {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
-        <StatCard label="Open" value={stats.open} />
-        <StatCard label="Unassigned" value={stats.unassigned} color="#DC2626" />
+        <StatCard label={isPOC ? 'My open' : 'Open'} value={stats.open} />
+        {!isPOC && <StatCard label="Unassigned" value={stats.unassigned} color="#DC2626" />}
+        {isPOC && <StatCard label="In progress" value={scoped.filter(i => i.status === 'in_progress').length} color="#EA580C" />}
         <StatCard label="Urgent (P0)" value={stats.urgent} color="#DC2626" />
         <StatCard label="Resolved today" value={stats.resolved} color="#16A34A" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: user.role === 'admin' ? '1fr 320px' : '1fr', gap: 20 }}>
         <div style={{ background: 'white', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #F3F4F6', fontSize: 14, fontWeight: 700 }}>Needs your attention</div>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #F3F4F6', fontSize: 14, fontWeight: 700 }}>{isPOC ? 'Assigned to you' : 'Needs your attention'}</div>
           {triage.length === 0 ? (
-            <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Nothing unassigned — nice.</div>
+            <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>{isPOC ? 'Nothing assigned to you yet.' : 'Nothing unassigned — nice.'}</div>
           ) : triage.map(i => <AdminIssueRow key={i.issue_id} issue={i} onClick={() => onOpenIssue(i.issue_id)} />)}
         </div>
         {user.role === 'admin' && (
@@ -441,8 +453,8 @@ function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReo
           <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6, margin: '8px 0 12px' }}>Conversation · {comments.length}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {comments.map(c => {
-              const author = userFor(c.author_id);
-              const isMine = c.author_id === user.user_id;
+              const author = userFor(c.commented_by);
+              const isMine = c.commented_by === user.user_id;
               return (
                 <div key={c.comment_id} style={{ display: 'flex', gap: 12, flexDirection: isMine ? 'row-reverse' : 'row' }}>
                   <Avatar user={author} size={32} />
@@ -453,7 +465,7 @@ function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReo
                       {c.is_ai_generated && <span style={{ background: '#F5F3FF', color: '#7C3AED', padding: '1px 6px', borderRadius: 4, marginLeft: 6, fontSize: 10, fontWeight: 700 }}>AI</span>}
                       {c.is_internal && <span style={{ background: '#FEF3C7', color: '#B45309', padding: '1px 6px', borderRadius: 4, marginLeft: 6, fontSize: 10, fontWeight: 700 }}>INTERNAL</span>}
                     </div>
-                    <div style={{ padding: '10px 14px', borderRadius: 14, background: isMine ? '#111827' : (c.is_internal ? '#FFFBEB' : 'white'), color: isMine ? 'white' : '#111827', fontSize: 14, lineHeight: 1.5, boxShadow: isMine ? 'none' : '0 1px 2px rgba(0,0,0,0.04)', border: c.is_internal && !isMine ? '1px solid #FDE68A' : 'none' }}>{c.body}</div>
+                    <div style={{ padding: '10px 14px', borderRadius: 14, background: isMine ? '#111827' : (c.is_internal ? '#FFFBEB' : 'white'), color: isMine ? 'white' : '#111827', fontSize: 14, lineHeight: 1.5, boxShadow: isMine ? 'none' : '0 1px 2px rgba(0,0,0,0.04)', border: c.is_internal && !isMine ? '1px solid #FDE68A' : 'none' }}>{c.comment_text}</div>
                   </div>
                 </div>
               );
