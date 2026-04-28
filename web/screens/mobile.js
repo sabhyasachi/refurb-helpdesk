@@ -166,13 +166,13 @@ const URGENCY_LABELS = {
 const RAISE_CATEGORIES = ['bug', 'other'];
 
 function MobileNew({ user, onCancel, onSubmit }) {
-  const [draft, setDraft] = React.useState({ category: null, description: '', priority: null, attachments: [] });
+  const [draft, setDraft] = React.useState({ category: null, vehicle_id: '', description: '', priority: null, attachments: [] });
   const [busy, setBusy] = React.useState(false);
   const fileRef = React.useRef();
   const update = (patch) => setDraft(d => ({ ...d, ...patch }));
 
   // Description required (≥10 chars) + priority required. Category is optional.
-  const canSubmit = draft.description.trim().length >= 10 && !!draft.priority;
+  const canSubmit = draft.description.trim().length >= 10 && !!draft.priority && !!draft.vehicle_id.trim();
 
   const pickFiles = (e) => {
     const files = Array.from(e.target.files || []);
@@ -187,14 +187,10 @@ function MobileNew({ user, onCancel, onSubmit }) {
     if (!canSubmit || busy) return;
     setBusy(true);
     try {
-      // Auto-generate a short title from the description (first sentence or first 60 chars).
-      // Kept in DB for AI summarisation + quick scanning in the admin list.
       const desc = draft.description.trim();
-      const firstLine = desc.split(/[\n.?!]/)[0].trim();
-      const title = (firstLine.length >= 3 ? firstLine : desc).slice(0, 80);
       await onSubmit({
         category: draft.category || 'other',
-        title,
+        title: draft.vehicle_id.trim(),
         description: desc,
         priority: draft.priority,
         attachments: draft.attachments,
@@ -216,6 +212,17 @@ function MobileNew({ user, onCancel, onSubmit }) {
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+        {/* 0. Car / Lead ID — required */}
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+          Car / Lead ID <span style={{ color: '#DC2626' }}>*</span>
+        </label>
+        <input
+          value={draft.vehicle_id}
+          onChange={e => update({ vehicle_id: e.target.value })}
+          placeholder="e.g. KA01AB1234 or LD-2398"
+          style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid #E5E7EB', borderRadius: 12, padding: '14px 16px', fontSize: 16, outline: 'none', marginBottom: 18 }}
+        />
+
         {/* 1. Description — required, primary field */}
         <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
           What's going on? <span style={{ color: '#DC2626' }}>*</span>
