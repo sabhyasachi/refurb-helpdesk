@@ -70,7 +70,12 @@ const API = (() => {
 
     issuesList:   (user, filters = {}) => call('/issues-list',     { scope: scopeFor(user), filters, limit: 200 }),
     issuesGet:    (user, issue_id)     => call('/issues-get',      { issue_id, scope: scopeFor(user) }),
-    issuesCreate: (payload)            => call('/issues-create',   payload),
+    issuesCreate: async (payload) => {
+      const r = await call('/issues-create', payload);
+      const row = Array.isArray(r) ? r[0] : r;
+      // Accept any of: { issue: {...} }, [{ issue: {...} }], or the raw row
+      return row && row.issue ? row : { issue: row };
+    },
     issuesUpdate: (issue_id, patch, actor) => call('/issues-update', { issue_id, patch, actor }),
     issuesReopen: (issue_id, actor)    => call('/issues-reopen',   { issue_id, actor }),
 

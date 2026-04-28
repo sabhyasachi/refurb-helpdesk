@@ -35,13 +35,31 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst { issue_id, patch = {}, scope = {}, actor = {} } = body;\nconst eff = Object.keys(scope).length ? scope : actor;\n\nif (!issue_id) throw new Error('MISSING_ISSUE_ID');\n\nconst issues = $input.all().map(x => x.json);\nconst issue = issues.find(i => i.issue_id === issue_id);\nif (!issue) throw new Error('ISSUE_NOT_FOUND');\n\n// Role-based field permissions\nconst isAdmin   = eff.role === 'admin';\nconst isManager = eff.role === 'manager';\nconst isRaiser  = eff.user_id === issue.raised_by;\n\nif (!isAdmin && !isManager && !isRaiser) {\n  throw new Error('FORBIDDEN');\n}\n\n// Only admins/managers can change status, assign, set priority\nconst merged = {\n  ...issue,\n  title:       patch.title       ?? issue.title,\n  description: patch.description ?? issue.description,\n  category:    patch.category    ?? issue.category,\n  updated_at:  new Date().toISOString(),\n};\n\nif (isAdmin || isManager) {\n  merged.priority    = patch.priority    ?? issue.priority;\n  merged.assigned_to = patch.assigned_to !== undefined ? patch.assigned_to : issue.assigned_to;\n  if (patch.status) {\n    const allowed = ['open', 'in_progress', 'resolved', 'closed'];\n    if (!allowed.includes(patch.status)) throw new Error('INVALID_STATUS');\n    merged.status = patch.status;\n  }\n}\n\nreturn [{ json: merged }];"
+        "documentId": { "__rl": true, "mode": "list", "value": "1OOQH2zt8nZ721nMGF0VBYdiVbEkA5dHbaozEF4x6b3c", "cachedResultName": "RefurbHelpdesk_DB" },
+        "sheetName": { "__rl": true, "mode": "list", "value": "users", "cachedResultName": "users" },
+        "options": {}
+      },
+      "id": "j0000001-0006-0006-0006-000000000006",
+      "name": "Read users",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [460, 460],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
+          "name": "RefurbHelpdesk OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst { issue_id, patch = {}, scope = {}, actor = {} } = body;\nconst eff = Object.keys(scope).length ? scope : actor;\n\nif (!issue_id) throw new Error('MISSING_ISSUE_ID');\n\nconst issues = $('Read issues').all().map(x => x.json);\nconst issue = issues.find(i => i.issue_id === issue_id);\nif (!issue) throw new Error('ISSUE_NOT_FOUND');\n\nconst users = Object.fromEntries(\n  $('Read users').all().map(x => x.json).map(u => [u.user_id, u])\n);\n\nconst isAdmin   = eff.role === 'admin';\nconst isManager = eff.role === 'manager';\nconst isRaiser  = eff.user_id === issue.raised_by;\n\nif (!isAdmin && !isManager && !isRaiser) throw new Error('FORBIDDEN');\n\nconst merged = {\n  ...issue,\n  title:       patch.title       ?? issue.title,\n  description: patch.description ?? issue.description,\n  category:    patch.category    ?? issue.category,\n  updated_at:  new Date().toISOString(),\n};\n\nif (isAdmin || isManager) {\n  merged.priority    = patch.priority    ?? issue.priority;\n  merged.assigned_to = patch.assigned_to !== undefined ? patch.assigned_to : issue.assigned_to;\n  if (patch.status) {\n    const allowed = ['open', 'assigned', 'in_progress', 'resolved', 'reopened', 'closed'];\n    if (!allowed.includes(patch.status)) throw new Error('INVALID_STATUS');\n    merged.status = patch.status;\n  }\n}\n\n// Was this an assignment action?\nconst wasAssigned = patch.assigned_to && patch.assigned_to !== issue.assigned_to;\nconst assignee = wasAssigned ? (users[patch.assigned_to] || null) : null;\nconst actor_user = users[eff.user_id] || null;\n\nreturn [{ json: {\n  ...merged,\n  __slack: wasAssigned ? {\n    event: 'issue_assigned',\n    issue_id: merged.issue_id,\n    title: merged.title,\n    description: merged.description,\n    category: merged.category,\n    priority: merged.priority,\n    status: merged.status,\n    workshop_label: merged.workshop_id,\n    raiser_name: (users[merged.raised_by] || {}).full_name || merged.raised_by,\n    actor_name: (actor_user || {}).full_name || eff.user_id,\n    assignee_name: (assignee || {}).full_name || patch.assigned_to,\n  } : null,\n}}];"
       },
       "id": "j0000001-0003-0003-0003-000000000003",
       "name": "Merge patch",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [700, 300]
     },
     {
       "parameters": {
@@ -69,7 +87,7 @@
       "name": "Update row",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [900, 300],
+      "position": [940, 300],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "REPLACE_WITH_GOOGLE_OAUTH_CRED_ID",
@@ -79,8 +97,50 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Merge patch').first().json.__slack }}",
+              "rightValue": "",
+              "operator": { "type": "object", "operation": "notEmpty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "j0000001-0007-0007-0007-000000000007",
+      "name": "Was assigned?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1160, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-xtdwg-u30560.vm.elestio.app/webhook/slack-notify",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Merge patch').first().json.__slack) }}",
+        "options": {}
+      },
+      "id": "j0000001-0008-0008-0008-000000000008",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ issue: $json }) }}",
+        "responseBody": "={{ JSON.stringify({ issue: $('Merge patch').first().json }) }}",
         "options": {
           "responseCode": 200,
           "responseHeaders": {
@@ -94,14 +154,23 @@
       "name": "Respond 200",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1120, 300]
+      "position": [1600, 300]
     }
   ],
   "connections": {
-    "Webhook":     { "main": [ [ { "node": "Read issues", "type": "main", "index": 0 } ] ] },
-    "Read issues": { "main": [ [ { "node": "Merge patch", "type": "main", "index": 0 } ] ] },
-    "Merge patch": { "main": [ [ { "node": "Update row",  "type": "main", "index": 0 } ] ] },
-    "Update row":  { "main": [ [ { "node": "Respond 200", "type": "main", "index": 0 } ] ] }
+    "Webhook":      { "main": [ [
+      { "node": "Read issues", "type": "main", "index": 0 },
+      { "node": "Read users",  "type": "main", "index": 0 }
+    ] ] },
+    "Read issues":  { "main": [ [ { "node": "Merge patch",  "type": "main", "index": 0 } ] ] },
+    "Read users":   { "main": [ [ { "node": "Merge patch",  "type": "main", "index": 0 } ] ] },
+    "Merge patch":  { "main": [ [ { "node": "Update row",   "type": "main", "index": 0 } ] ] },
+    "Update row":   { "main": [ [ { "node": "Was assigned?","type": "main", "index": 0 } ] ] },
+    "Was assigned?":{ "main": [
+      [ { "node": "Notify Slack", "type": "main", "index": 0 } ],
+      [ { "node": "Respond 200",  "type": "main", "index": 0 } ]
+    ] },
+    "Notify Slack": { "main": [ [ { "node": "Respond 200",  "type": "main", "index": 0 } ] ] }
   },
   "settings": { "executionOrder": "v1" },
   "active": false,
