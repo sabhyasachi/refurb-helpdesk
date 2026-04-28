@@ -308,7 +308,9 @@ function MobileNew({ user, onCancel, onSubmit }) {
 function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, refreshing }) {
   const [draft, setDraft] = React.useState('');
   const [sending, setSending] = React.useState(false);
-  const { issue, comments, attachments, raiser, assignee } = issueData;
+  const { issue, comments, attachments } = issueData;
+  const raiser = issueData.raiser || userFor(issue.raised_by);
+  const assignee = issueData.assignee || (issue.assigned_to ? userFor(issue.assigned_to) : null);
   const cat = lookup(window.CATEGORIES, issue.category) || {};
 
   const send = async () => {

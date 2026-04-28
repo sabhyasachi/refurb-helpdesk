@@ -379,7 +379,9 @@ function IssuesList({ user, issues, onOpenIssue }) {
 }
 
 function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReopen, refreshing }) {
-  const { issue, comments, attachments, raiser, assignee } = issueData;
+  const { issue, comments, attachments } = issueData;
+  const raiser = issueData.raiser || userFor(issue.raised_by);
+  const assignee = issueData.assignee || (issue.assigned_to ? userFor(issue.assigned_to) : null);
   const [draft, setDraft] = React.useState('');
   const [internal, setInternal] = React.useState(false);
   const [sending, setSending] = React.useState(false);
