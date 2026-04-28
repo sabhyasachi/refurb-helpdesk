@@ -1,4 +1,10 @@
-attachment_id,issue_id,uploaded_by,file_name,drive_file_id,drive_url,mime_type,file_size_bytes,created_at
-ATT-00001,RH-248,u_rajesh,fan_sound.mp3,SEED_PLACEHOLDER_001,,audio/mpeg,1258291,2026-04-21T12:00:00Z
-ATT-00002,RH-248,u_rajesh,bay3.jpg,SEED_PLACEHOLDER_002,,image/jpeg,348160,2026-04-21T12:00:00Z
-ATT-00003,RH-246,u_arun,gun_reading.jpg,SEED_PLACEHOLDER_003,,image/jpeg,524288,2026-04-20T14:00:00Z
+attachment_id,issue_id,uploaded_by,url,thumb_url,file_name,mime,size_bytes,kind,public_id,kind,public_id
+String,String,String,String,String,String,String,123,String,String,String,String
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,

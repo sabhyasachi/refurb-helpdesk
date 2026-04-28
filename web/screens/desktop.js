@@ -439,13 +439,24 @@ function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReo
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>Attachments · {attachments.length}</div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {attachments.map(a => (
-                  <a key={a.attachment_id} href={a.drive_url} target="_blank" rel="noopener" style={{ background: '#F3F4F6', borderRadius: 10, padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                    <Icon name="paperclip" size={14} color="#6B7280" />
-                    <span style={{ color: '#374151', fontWeight: 500 }}>{a.file_name}</span>
-                    <Icon name="external" size={12} color="#9CA3AF" />
-                  </a>
-                ))}
+                {attachments.map(a => {
+                  const href = a.url || a.drive_url;
+                  const isImage = (a.kind === 'image') || /^image\//.test(a.mime || '') || /\.(png|jpe?g|gif|webp|heic)$/i.test(a.file_name || '');
+                  if (isImage) {
+                    return (
+                      <a key={a.attachment_id} href={href} target="_blank" rel="noopener" title={a.file_name} style={{ display: 'block', borderRadius: 10, overflow: 'hidden', border: '1px solid #E5E7EB' }}>
+                        <img src={a.thumb_url || href} alt={a.file_name || 'attachment'} style={{ display: 'block', width: 140, height: 140, objectFit: 'cover' }} />
+                      </a>
+                    );
+                  }
+                  return (
+                    <a key={a.attachment_id} href={href} target="_blank" rel="noopener" style={{ background: '#F3F4F6', borderRadius: 10, padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                      <Icon name="paperclip" size={14} color="#6B7280" />
+                      <span style={{ color: '#374151', fontWeight: 500 }}>{a.file_name}</span>
+                      <Icon name="external" size={12} color="#9CA3AF" />
+                    </a>
+                  );
+                })}
               </div>
             </div>
           )}

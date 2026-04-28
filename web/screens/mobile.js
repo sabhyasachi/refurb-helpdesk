@@ -383,13 +383,24 @@ function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, refre
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10, paddingLeft: 4 }}>Attachments · {attachments.length}</div>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-              {attachments.map(a => (
-                <a key={a.attachment_id} href={a.drive_url} target="_blank" rel="noopener" style={{ minWidth: 140, background: 'white', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 6, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-                  <Icon name="paperclip" size={16} color="#6B7280" />
-                  <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.file_name}</div>
-                  <div style={{ fontSize: 10, color: '#9CA3AF' }}>{Math.round((a.file_size_bytes || 0) / 1024)} KB</div>
-                </a>
-              ))}
+              {attachments.map(a => {
+                const href = a.url || a.drive_url;
+                const isImage = (a.kind === 'image') || /^image\//.test(a.mime || '') || /\.(png|jpe?g|gif|webp|heic)$/i.test(a.file_name || '');
+                if (isImage) {
+                  return (
+                    <a key={a.attachment_id} href={href} target="_blank" rel="noopener" title={a.file_name} style={{ display: 'block', borderRadius: 12, overflow: 'hidden', flexShrink: 0 }}>
+                      <img src={a.thumb_url || href} alt={a.file_name || 'attachment'} style={{ display: 'block', width: 120, height: 120, objectFit: 'cover' }} />
+                    </a>
+                  );
+                }
+                return (
+                  <a key={a.attachment_id} href={href} target="_blank" rel="noopener" style={{ minWidth: 140, background: 'white', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 6, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                    <Icon name="paperclip" size={16} color="#6B7280" />
+                    <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.file_name}</div>
+                    <div style={{ fontSize: 10, color: '#9CA3AF' }}>{Math.round((a.size_bytes || a.file_size_bytes || 0) / 1024)} KB</div>
+                  </a>
+                );
+              })}
             </div>
           </div>
         )}
