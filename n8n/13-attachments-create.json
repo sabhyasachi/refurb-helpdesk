@@ -1,0 +1,85 @@
+{
+  "name": "RH · attachments-create",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "attachments-create",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "n3000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "rh-attachments-create"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst {\n  issue_id, uploaded_by, url, thumb_url, file_name,\n  mime, size_bytes, kind, public_id,\n} = body;\n\nif (!issue_id) throw new Error('MISSING_ISSUE_ID');\nif (!url)      throw new Error('MISSING_URL');\n\n// Generate ATT-NNN id (best effort — relies on Read attachments node if present)\nlet attachment_id;\ntry {\n  const rows = $('Read attachments').all().map(x => x.json);\n  const nums = rows\n    .map(a => parseInt((a.attachment_id || '').replace('ATT-', ''), 10))\n    .filter(n => !isNaN(n));\n  const next = nums.length ? Math.max(...nums) + 1 : 1;\n  attachment_id = 'ATT-' + String(next).padStart(3, '0');\n} catch (e) {\n  attachment_id = 'ATT-' + Date.now().toString().slice(-6);\n}\n\nreturn [{ json: {\n  attachment_id,\n  issue_id,\n  uploaded_by: uploaded_by || '',\n  url,\n  thumb_url: thumb_url || '',\n  file_name: file_name || '',\n  mime: mime || '',\n  size_bytes: size_bytes || 0,\n  kind: kind || 'raw',\n  public_id: public_id || '',\n  created_at: new Date().toISOString(),\n}}];"
+      },
+      "id": "n3000001-0002-0002-0002-000000000002",
+      "name": "Build row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "documentId": { "__rl": true, "mode": "list", "value": "REPLACE_WITH_DATA_TABLE_ID", "cachedResultName": "issue_attachments" },
+        "tableId":    { "__rl": true, "mode": "list", "value": "issue_attachments" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "attachment_id": "={{ $json.attachment_id }}",
+            "issue_id":      "={{ $json.issue_id }}",
+            "uploaded_by":   "={{ $json.uploaded_by }}",
+            "url":           "={{ $json.url }}",
+            "thumb_url":     "={{ $json.thumb_url }}",
+            "file_name":     "={{ $json.file_name }}",
+            "mime":          "={{ $json.mime }}",
+            "size_bytes":    "={{ $json.size_bytes }}",
+            "kind":          "={{ $json.kind }}",
+            "public_id":     "={{ $json.public_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "n3000001-0003-0003-0003-000000000003",
+      "name": "Insert row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { attachment: $('Build row').first().json } }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "n3000001-0004-0004-0004-000000000004",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook":    { "main": [ [ { "node": "Build row",   "type": "main", "index": 0 } ] ] },
+    "Build row":  { "main": [ [ { "node": "Insert row",  "type": "main", "index": 0 } ] ] },
+    "Insert row": { "main": [ [ { "node": "Respond 200", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}

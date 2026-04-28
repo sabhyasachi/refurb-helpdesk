@@ -43,17 +43,42 @@ const API = (() => {
   }
 
   async function uploadAttachment(issue_id, file, uploaded_by) {
+    const cloud  = window.CONFIG?.CLOUDINARY_CLOUD;
+    const preset = window.CONFIG?.CLOUDINARY_PRESET;
+    if (!cloud || !preset) throw new Error('Cloudinary not configured');
+
+    // Step 1 — direct browser upload to Cloudinary (no backend involved)
+    // Pick endpoint by file kind. Cloudinary uses `image` for img, `video` for audio/video,
+    // and `raw` for PDFs and other docs.
+    const kind = file.type.startsWith('image/') ? 'image'
+              : file.type.startsWith('audio/') || file.type.startsWith('video/') ? 'video'
+              : 'raw';
     const fd = new FormData();
     fd.append('file', file);
-    fd.append('issue_id', issue_id);
-    fd.append('uploaded_by', uploaded_by);
-    const res = await fetch(`${base()}/attachments-upload`, {
+    fd.append('upload_preset', preset);
+    const cdRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/${kind}/upload`, {
       method: 'POST',
-      headers: { ...(token() ? { 'Authorization': `Bearer ${token()}` } : {}) },
       body: fd,
     });
-    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-    return res.json();
+    if (!cdRes.ok) {
+      const err = await cdRes.json().catch(() => ({}));
+      throw new Error(`Cloudinary upload failed: ${err.error?.message || cdRes.status}`);
+    }
+    const cd = await cdRes.json();
+
+    // Step 2 — record metadata in our data table via n8n
+    const meta = {
+      issue_id,
+      uploaded_by,
+      url:        cd.secure_url,
+      thumb_url:  kind === 'image' ? cd.secure_url.replace('/upload/', '/upload/c_thumb,w_400,q_auto,f_auto/') : null,
+      file_name:  file.name,
+      mime:       file.type,
+      size_bytes: file.size,
+      kind,
+      public_id:  cd.public_id,
+    };
+    return call('/attachments-create', meta);
   }
 
   function scopeFor(user) {

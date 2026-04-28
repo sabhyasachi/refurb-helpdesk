@@ -13,9 +13,13 @@ window.CONFIG = {
   // Which user ID to attribute AI-generated comments to.
   AI_BOT_USER_ID: "u_bot",
 
-  // Raise-issue form: lets technicians upload images/audio/pdf via Drive.
-  ATTACHMENT_MAX_BYTES: 25 * 1024 * 1024,
+  // Raise-issue form: lets technicians upload images/audio/pdf via Cloudinary.
+  ATTACHMENT_MAX_BYTES: 10 * 1024 * 1024,
   ATTACHMENT_ACCEPT:    "image/*,audio/*,application/pdf",
+
+  // Cloudinary direct browser upload — public values, safe to commit.
+  CLOUDINARY_CLOUD:  "dmq4flagg",
+  CLOUDINARY_PRESET: "refurb_helpdesk",
 
   // Brand
   APP_NAME:       "Refurb Helpdesk",
