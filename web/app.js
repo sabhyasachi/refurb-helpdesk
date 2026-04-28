@@ -157,16 +157,16 @@ function App() {
     }
 
     try {
-      // Always fetch issues fresh; skip lookups/users if cache is warm
+      // Always fetch fresh; cache was just used for instant first paint
       const [lookups, usersRes, issuesRes] = await Promise.all([
-        cachedLookups ? Promise.resolve(cachedLookups) : API.lookups(),
-        cachedUsers   ? Promise.resolve(cachedUsers)   : API.usersList(),
+        API.lookups(),
+        API.usersList(),
         API.issuesList(user, {}),
       ]);
 
-      // Update cache if we just fetched fresh data
-      if (!cachedLookups) setCache('lookups', lookups);
-      if (!cachedUsers)   setCache('users',   usersRes);
+      // Refresh cache with new data
+      setCache('lookups', lookups);
+      setCache('users',   usersRes);
 
       applyLookups(lookups);
       applyUsers(usersRes, setUsers);
