@@ -198,9 +198,11 @@ function App() {
     notifDedupRef.current.add(key);
     const n = { ...notif, id: Math.random().toString(36).slice(2), at: new Date().toISOString(), read: false };
     setNotifications(prev => [n, ...prev].slice(0, 50));
-    // Browser push notification when tab is backgrounded
+    // Always-visible in-app toast (works regardless of tab visibility / permission)
+    toast(`🔔 ${notif.message}`, 'info', 5000);
+    // Native browser push when tab is backgrounded — extra layer
     try {
-      if (document.visibilityState !== 'visible' && Notification?.permission === 'granted') {
+      if (document.visibilityState !== 'visible' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         new Notification('Refurb Helpdesk', { body: notif.message, icon: './icons/icon-192.png', tag: key });
       }
     } catch (_) {}
@@ -301,6 +303,18 @@ function App() {
 
   React.useEffect(() => { if (session?.user) bootstrap(session.user); /* eslint-disable-next-line */ }, [session?.user?.user_id]);
 
+  // Request browser-notification permission whenever a session is active.
+  // Covers both fresh logins AND auto-login from saved session (where onLogin never fires).
+  React.useEffect(() => {
+    if (!session?.user) return;
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        const p = Notification.requestPermission?.();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      }
+    } catch (_) {}
+  }, [session?.user?.user_id]);
+
   const refreshIssues = async (silent = false) => {
     if (!session?.user) return;
     try {
@@ -398,14 +412,50 @@ function App() {
         raised_by: session.user.user_id,
         workshop_id: session.user.workshop_id,
       });
-      for (const file of draft.attachments) {
-        try { await API.uploadAttachment(issue.issue_id, file, session.user.user_id); }
-        catch (e) { toast(`Upload failed: ${file.name}`, 'error'); }
-      }
-      toast(`Issue ${issue.issue_id} raised · AI triage running`, 'success');
-      await refreshIssues(true);
+
+      // Show success + redirect immediately — uploads happen in background.
+      const hasAtt = draft.attachments?.length > 0;
+      toast(hasAtt ? `Issue ${issue.issue_id} raised · uploading photos…` : `Issue ${issue.issue_id} raised`, 'success');
       setPage('issues');
       openIssue(issue.issue_id);
+      refreshIssues(true);
+
+      // Background upload — keeps UI responsive on slow mobile networks.
+      if (hasAtt) {
+        (async () => {
+          const optimistic = [];
+          for (const file of draft.attachments) {
+            try {
+              const res = await API.uploadAttachment(issue.issue_id, file, session.user.user_id);
+              const att = res?.attachment;
+              if (att) {
+                optimistic.push(att);
+                // Inject immediately so user sees their image (avoids race with stale DB rows)
+                setOpenIssueData(prev => {
+                  if (!prev || prev.issue?.issue_id !== issue.issue_id) return prev;
+                  const existing = prev.attachments || [];
+                  if (existing.find(a => a.attachment_id === att.attachment_id)) return prev;
+                  return { ...prev, attachments: [...existing, att] };
+                });
+              }
+            } catch (e) {
+              toast(`Upload failed: ${file.name}`, 'error');
+            }
+          }
+          // Wait for n8n data table to commit, then re-fetch to confirm
+          if (optimistic.length) {
+            await new Promise(r => setTimeout(r, 1500));
+            try {
+              const data = await API.issuesGet(session.user, issue.issue_id);
+              // Only overwrite if our optimistic atts are present (else keep optimistic)
+              const serverIds = new Set((data.attachments || []).map(a => a.attachment_id));
+              const allPresent = optimistic.every(a => serverIds.has(a.attachment_id));
+              if (allPresent) setOpenIssueData(data);
+              toast(`${optimistic.length} photo${optimistic.length > 1 ? 's' : ''} uploaded`, 'success');
+            } catch (_) {}
+          }
+        })();
+      }
     } catch (e) {
       toast(`Couldn't raise issue: ${e.message}`, 'error');
       throw e;
@@ -479,9 +529,28 @@ function App() {
 
   const attachToIssue = async (file) => {
     if (!openIssueId) return;
-    await API.uploadAttachment(openIssueId, file, session.user.user_id);
-    const data = await API.issuesGet(session.user, openIssueId);
-    setOpenIssueData(data);
+    const targetId = openIssueId;
+    const res = await API.uploadAttachment(targetId, file, session.user.user_id);
+    const att = res?.attachment;
+    // Optimistically inject so user sees the just-uploaded file instantly
+    if (att) {
+      setOpenIssueData(prev => {
+        if (!prev || prev.issue?.issue_id !== targetId) return prev;
+        const existing = prev.attachments || [];
+        if (existing.find(a => a.attachment_id === att.attachment_id)) return prev;
+        return { ...prev, attachments: [...existing, att] };
+      });
+    }
+    // Re-fetch from server after a delay to confirm + pick up any other changes
+    setTimeout(async () => {
+      try {
+        const data = await API.issuesGet(session.user, targetId);
+        const serverIds = new Set((data.attachments || []).map(a => a.attachment_id));
+        if (!att || serverIds.has(att.attachment_id)) {
+          setOpenIssueData(curr => (curr && curr.issue?.issue_id === targetId) ? data : curr);
+        }
+      } catch (_) {}
+    }, 1500);
   };
 
   // ─── Render helpers ───────────────────────────────────────────────────────
