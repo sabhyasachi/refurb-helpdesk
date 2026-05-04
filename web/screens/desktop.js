@@ -3,7 +3,7 @@
 const NAV_ITEMS_ADMIN   = [ { id: 'dashboard', label: 'Dashboard', icon: 'home' }, { id: 'issues', label: 'All issues', icon: 'list' }, { id: 'team', label: 'Team', icon: 'users' } ];
 const NAV_ITEMS_MANAGER = [ { id: 'dashboard', label: 'Dashboard', icon: 'home' }, { id: 'issues', label: 'All issues', icon: 'list' } ];
 
-function DesktopShell({ user, activeTab, onNavTab, onLogout, children, title, subtitle }) {
+function DesktopShell({ user, activeTab, onNavTab, onLogout, children, title, subtitle, notifBell }) {
   const items = user.role === 'admin' ? NAV_ITEMS_ADMIN : NAV_ITEMS_MANAGER;
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
@@ -32,6 +32,7 @@ function DesktopShell({ user, activeTab, onNavTab, onLogout, children, title, su
             <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.full_name}</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{user.username}</div>
           </div>
+          {notifBell}
           <button onClick={onLogout} title="Log out" style={{ color: 'rgba(255,255,255,0.6)', padding: 8 }}>
             <Icon name="logout" size={16} />
           </button>

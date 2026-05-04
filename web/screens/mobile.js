@@ -1,7 +1,7 @@
 // Mobile views for technicians (and managers in mobile mode).
 // Exports: MobileApp
 
-function MobileShell({ children, active, onNav, title, onBack, rightEl, hideTabBar }) {
+function MobileShell({ children, active, onNav, title, onBack, rightEl, notifBell, hideTabBar }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#F7F8FA', color: '#111827' }}>
       <div style={{ paddingTop: 'max(12px, env(safe-area-inset-top))', paddingBottom: 12, paddingLeft: 16, paddingRight: 16, background: 'white', borderBottom: '1px solid #EEF0F3', display: 'flex', alignItems: 'center', gap: 12, minHeight: 56 }}>
@@ -11,6 +11,7 @@ function MobileShell({ children, active, onNav, title, onBack, rightEl, hideTabB
           </button>
         )}
         <div style={{ flex: 1, fontSize: onBack ? 17 : 22, fontWeight: 700, letterSpacing: -0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+        {notifBell}
         {rightEl}
       </div>
       <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{children}</div>
@@ -60,7 +61,7 @@ function IssueRow({ issue, onClick, divider }) {
   );
 }
 
-function MobileHome({ user, issues, onNav, onOpenIssue, onLogout }) {
+function MobileHome({ user, issues, onNav, onOpenIssue, onLogout, notifBell }) {
   const mine = issues.filter(i => i.raised_by === user.user_id);
   const openCount = mine.filter(i => ['open', 'assigned', 'in_progress', 'reopened'].includes(i.status)).length;
   const resolvedCount = mine.filter(i => i.status === 'resolved').length;
@@ -74,6 +75,7 @@ function MobileHome({ user, issues, onNav, onOpenIssue, onLogout }) {
     <MobileShell
       active="home" onNav={onNav}
       title={<span>Hello, {user.full_name.split(' ')[0]} 👋</span>}
+      notifBell={notifBell}
       rightEl={<button onClick={onLogout} title="Log out" style={{ padding: 8, color: '#6B7280' }}><Icon name="logout" size={20} /></button>}
     >
       <div style={{ padding: 16, paddingBottom: 32 }}>
@@ -117,7 +119,7 @@ function MobileHome({ user, issues, onNav, onOpenIssue, onLogout }) {
   );
 }
 
-function MobileIssues({ user, issues, onNav, onOpenIssue }) {
+function MobileIssues({ user, issues, onNav, onOpenIssue, notifBell }) {
   const [filter, setFilter] = React.useState('all');
   const mine = issues.filter(i => i.raised_by === user.user_id);
   const tabs = [
@@ -128,7 +130,7 @@ function MobileIssues({ user, issues, onNav, onOpenIssue }) {
   const visible = filter === 'all' ? mine : filter === 'resolved' ? mine.filter(i => i.status === 'resolved') : mine.filter(i => ['open', 'assigned', 'in_progress', 'reopened'].includes(i.status));
 
   return (
-    <MobileShell active="issues" onNav={onNav} title="My issues">
+    <MobileShell active="issues" onNav={onNav} title="My issues" notifBell={notifBell}>
       <div style={{ padding: '12px 16px', background: 'white', borderBottom: '1px solid #EEF0F3', display: 'flex', gap: 8, overflowX: 'auto' }}>
         {tabs.map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)} style={{ background: filter === f.id ? '#111827' : '#F3F4F6', color: filter === f.id ? 'white' : '#374151', padding: '8px 14px', borderRadius: 999, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -312,7 +314,7 @@ function MobileNew({ user, onCancel, onSubmit }) {
   );
 }
 
-function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, onAttach, refreshing }) {
+function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, onAttach, notifBell, refreshing }) {
   const [draft, setDraft] = React.useState('');
   const [sending, setSending] = React.useState(false);
   const [attaching, setAttaching] = React.useState(false);
@@ -355,6 +357,7 @@ function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, onAtt
           <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, letterSpacing: 0.4 }}>{issue.issue_id}</div>
           <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.25 }}>{issue.title}</div>
         </div>
+        {notifBell}
         {refreshing && <div className="pulse" style={{ fontSize: 10, color: '#9CA3AF' }}>syncing…</div>}
       </div>
 
