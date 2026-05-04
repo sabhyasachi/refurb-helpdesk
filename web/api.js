@@ -89,8 +89,16 @@ const API = (() => {
     login:        (username)            => call('/auth-login',      { username }),
     lookups:      ()                    => call('/lookups',         {}),
     usersList:    ()                    => call('/users-list',      {}),
-    usersCreate:  (payload)             => call('/users-create',    payload),
-    usersUpdate:  (user_id, patch)      => call('/users-update',    { user_id, patch }),
+    usersCreate: async (payload) => {
+      const r = await call('/users-create', payload);
+      const row = Array.isArray(r) ? r[0] : r;
+      return row && row.user ? row : { user: row };
+    },
+    usersUpdate: async (user_id, patch) => {
+      const r = await call('/users-update', { user_id, patch });
+      const row = Array.isArray(r) ? r[0] : r;
+      return row && row.user ? row : { user: row };
+    },
     usersDelete:  (user_id)             => call('/users-delete',    { user_id }),
 
     issuesList:   (user, filters = {}) => call('/issues-list',     { scope: scopeFor(user), filters, limit: 200 }),

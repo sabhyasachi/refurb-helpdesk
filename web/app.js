@@ -286,17 +286,17 @@ function App() {
 
   const saveUser = async (payload) => {
     try {
-      if (teamDialog?.mode === 'add') {
-        const { user } = await API.usersCreate(payload);
-        setUsers(us => { const next = [...us, user]; setCache('users', { users: next }); return next; });
-        window.USERS_BY_ID[user.user_id] = user;
-        toast(`Created ${user.full_name}`, 'success');
+      const isAdd = teamDialog?.mode === 'add';
+      if (isAdd) {
+        await API.usersCreate(payload);
       } else {
-        const { user } = await API.usersUpdate(teamDialog.initial.user_id, payload);
-        setUsers(us => { const next = us.map(u => u.user_id === user.user_id ? user : u); setCache('users', { users: next }); return next; });
-        window.USERS_BY_ID[user.user_id] = user;
-        toast(`Updated ${user.full_name}`, 'success');
+        await API.usersUpdate(teamDialog.initial.user_id, payload);
       }
+      // Always re-fetch fresh from source so cache + USERS_BY_ID stay in sync
+      const freshRes = await API.usersList();
+      setCache('users', freshRes);
+      applyUsers(freshRes, setUsers);
+      toast(isAdd ? 'User created' : 'User updated', 'success');
       setTeamDialog(null);
     } catch (e) { throw e; }
   };
@@ -304,11 +304,19 @@ function App() {
   const deleteUser = async (user_id) => {
     try {
       await API.usersDelete(user_id);
-      setUsers(us => { const next = us.filter(u => u.user_id !== user_id); setCache('users', { users: next }); return next; });
-      delete window.USERS_BY_ID[user_id];
+      const freshRes = await API.usersList();
+      setCache('users', freshRes);
+      applyUsers(freshRes, setUsers);
       toast('User removed', 'success');
       setTeamDialog(null);
     } catch (e) { toast(`Delete failed: ${e.message}`, 'error'); }
+  };
+
+  const attachToIssue = async (file) => {
+    if (!openIssueId) return;
+    await API.uploadAttachment(openIssueId, file, session.user.user_id);
+    const data = await API.issuesGet(session.user, openIssueId);
+    setOpenIssueData(data);
   };
 
   // ─── Render ───
@@ -379,14 +387,14 @@ function App() {
     if (isMobile || user.role === 'workshop') {
       return (
         <>
-          <MobileIssueDetail issueData={openIssueData} user={user} onBack={closeIssue} onComment={addComment} onReopen={reopenIssue} refreshing={openIssueRefreshing} />
+          <MobileIssueDetail issueData={openIssueData} user={user} onBack={closeIssue} onComment={addComment} onReopen={reopenIssue} onAttach={attachToIssue} refreshing={openIssueRefreshing} />
           <Toast toasts={toasts} onDismiss={id => setToasts(t => t.filter(x => x.id !== id))} />
         </>
       );
     }
     return (
       <DesktopShell user={user} activeTab={page} onNavTab={p => { setPage(p); closeIssue(); }} onLogout={onLogout}>
-        <DesktopIssueDetail issueData={openIssueData} user={user} onBack={closeIssue} onPatch={patchIssue} onComment={addComment} onReopen={reopenIssue} refreshing={openIssueRefreshing} />
+        <DesktopIssueDetail issueData={openIssueData} user={user} onBack={closeIssue} onPatch={patchIssue} onComment={addComment} onReopen={reopenIssue} onAttach={attachToIssue} refreshing={openIssueRefreshing} />
         <Toast toasts={toasts} onDismiss={id => setToasts(t => t.filter(x => x.id !== id))} />
       </DesktopShell>
     );

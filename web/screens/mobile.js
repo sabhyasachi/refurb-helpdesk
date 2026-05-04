@@ -312,9 +312,11 @@ function MobileNew({ user, onCancel, onSubmit }) {
   );
 }
 
-function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, refreshing }) {
+function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, onAttach, refreshing }) {
   const [draft, setDraft] = React.useState('');
   const [sending, setSending] = React.useState(false);
+  const [attaching, setAttaching] = React.useState(false);
+  const attachRef = React.useRef();
   const { issue, comments, attachments } = issueData;
   const raiser = issueData.raiser || userFor(issue.raised_by);
   const assignee = issueData.assignee || (issue.assigned_to ? userFor(issue.assigned_to) : null);
@@ -329,6 +331,18 @@ function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, refre
     } finally {
       setSending(false);
     }
+  };
+
+  const pickAttachment = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const max = window.CONFIG?.ATTACHMENT_MAX_BYTES || 10 * 1024 * 1024;
+    if (file.size > max) { alert('File too large (max 10 MB)'); return; }
+    setAttaching(true);
+    try { await onAttach(file); }
+    catch (err) { alert('Upload failed: ' + err.message); }
+    finally { setAttaching(false); }
   };
 
   return (
@@ -434,6 +448,12 @@ function MobileIssueDetail({ issueData, user, onBack, onComment, onReopen, refre
 
       {issue.status !== 'resolved' && (
         <div style={{ padding: '10px 12px max(12px, env(safe-area-inset-bottom))', background: 'white', borderTop: '1px solid #EEF0F3', display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+          <input ref={attachRef} type="file" accept={window.CONFIG?.ATTACHMENT_ACCEPT || 'image/*,audio/*,application/pdf'} style={{ display: 'none' }} onChange={pickAttachment} />
+          <button onClick={() => attachRef.current?.click()} disabled={attaching} title="Attach file" style={{ background: attaching ? '#F3F4F6' : '#F3F4F6', width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {attaching
+              ? <div style={{ width: 16, height: 16, border: '2px solid #9CA3AF', borderTopColor: '#111827', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+              : <Icon name="paperclip" size={17} color="#6B7280" />}
+          </button>
           <textarea value={draft} onChange={e => setDraft(e.target.value)} placeholder="Add a reply…" rows={1} style={{ flex: 1, border: '1.5px solid #E5E7EB', borderRadius: 12, padding: '10px 14px', fontSize: 15, resize: 'none', outline: 'none', maxHeight: 100 }} />
           <button onClick={send} disabled={!draft.trim() || sending} style={{ background: (draft.trim() && !sending) ? '#111827' : '#E5E7EB', width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Icon name="send" size={17} color={(draft.trim() && !sending) ? 'white' : '#9CA3AF'} />

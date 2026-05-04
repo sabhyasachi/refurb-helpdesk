@@ -390,14 +390,16 @@ function IssuesList({ user, issues, onOpenIssue }) {
   );
 }
 
-function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReopen, refreshing }) {
+function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReopen, onAttach, refreshing }) {
   const { issue, comments, attachments } = issueData;
   const raiser = issueData.raiser || userFor(issue.raised_by);
   const assignee = issueData.assignee || (issue.assigned_to ? userFor(issue.assigned_to) : null);
   const [draft, setDraft] = React.useState('');
   const [internal, setInternal] = React.useState(false);
   const [sending, setSending] = React.useState(false);
+  const [attaching, setAttaching] = React.useState(false);
   const [assignOpen, setAssignOpen] = React.useState(false);
+  const attachRef = React.useRef();
   const pocs = Object.values(window.USERS_BY_ID).filter(u => u.role === 'poc');
   const cat = lookup(window.CATEGORIES, issue.category) || {};
 
@@ -406,6 +408,18 @@ function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReo
     setSending(true);
     try { await onComment(issue.issue_id, draft.trim(), internal); setDraft(''); setInternal(false); }
     finally { setSending(false); }
+  };
+
+  const pickAttachment = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const max = window.CONFIG?.ATTACHMENT_MAX_BYTES || 10 * 1024 * 1024;
+    if (file.size > max) { alert('File too large (max 10 MB)'); return; }
+    setAttaching(true);
+    try { await onAttach(file); }
+    catch (err) { alert('Upload failed: ' + err.message); }
+    finally { setAttaching(false); }
   };
 
   return (
@@ -484,6 +498,7 @@ function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReo
           </div>
 
           <div style={{ marginTop: 20, padding: 14, background: '#F9FAFB', borderRadius: 12 }}>
+            <input ref={attachRef} type="file" accept={window.CONFIG?.ATTACHMENT_ACCEPT || 'image/*,audio/*,application/pdf'} style={{ display: 'none' }} onChange={pickAttachment} />
             <textarea value={draft} onChange={e => setDraft(e.target.value)} placeholder="Write a reply…" rows={3} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E5E7EB', borderRadius: 10, padding: '10px 12px', fontSize: 14, resize: 'vertical', outline: 'none', background: 'white' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
               {user.role === 'admin' && (
@@ -491,6 +506,12 @@ function DesktopIssueDetail({ issueData, user, onBack, onPatch, onComment, onReo
                   <input type="checkbox" checked={internal} onChange={e => setInternal(e.target.checked)} /> Internal only
                 </label>
               )}
+              <button onClick={() => attachRef.current?.click()} disabled={attaching} title="Attach file" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', border: '1px solid #E5E7EB', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#6B7280' }}>
+                {attaching
+                  ? <div style={{ width: 13, height: 13, border: '2px solid #9CA3AF', borderTopColor: '#111827', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                  : <Icon name="paperclip" size={14} color="#6B7280" />}
+                {attaching ? 'Uploading…' : 'Attach'}
+              </button>
               <div style={{ flex: 1 }} />
               <button onClick={send} disabled={!draft.trim() || sending} style={{ background: (draft.trim() && !sending) ? '#111827' : '#E5E7EB', color: (draft.trim() && !sending) ? 'white' : '#9CA3AF', padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
                 {sending ? 'Sending…' : 'Send reply'}
