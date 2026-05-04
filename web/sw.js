@@ -1,7 +1,7 @@
 // Minimal service worker: cache-first for static shell, network-first for API.
 // Bump CACHE_VERSION to invalidate the shell on deploy.
 
-const CACHE_VERSION = 'rh-shell-v3';
+const CACHE_VERSION = 'rh-shell-v4';
 const SHELL = [
   './',
   './index.html',

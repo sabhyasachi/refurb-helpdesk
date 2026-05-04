@@ -101,32 +101,68 @@ function MobileSkeleton() {
 }
 
 // ─── Notification sound + native popup helpers ────────────────────────────────
-let _audioCtx = null;
+// HTML Audio with a runtime-generated WAV blob — far more reliable across browsers
+// than raw WebAudio (especially on Android Chrome and after-gesture replay).
+let _notifAudio = null;
+function _makeBeepUrl() {
+  const sampleRate = 22050;
+  const duration   = 0.45;        // total clip length in seconds
+  const freqs      = [880, 660];  // two-tone "ding"
+  const total      = Math.floor(sampleRate * duration);
+  const buf        = new ArrayBuffer(44 + total * 2);
+  const view       = new DataView(buf);
+  const w          = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+  w(0, 'RIFF');
+  view.setUint32(4, 36 + total * 2, true);
+  w(8, 'WAVE'); w(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  w(36, 'data');
+  view.setUint32(40, total * 2, true);
+  for (let i = 0; i < total; i++) {
+    const t   = i / sampleRate;
+    const seg = t < duration / 2 ? freqs[0] : freqs[1];
+    const env = Math.min(1, 50 * t) * Math.exp(-3.5 * (t < duration / 2 ? t : t - duration / 2));
+    const s   = Math.sin(2 * Math.PI * seg * t) * env * 0.6;
+    view.setInt16(44 + i * 2, s * 32767, true);
+  }
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
 function playNotifSound() {
   try {
-    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (_audioCtx.state === 'suspended') { try { _audioCtx.resume(); } catch (_) {} }
-    const t = _audioCtx.currentTime;
-    const osc = _audioCtx.createOscillator();
-    const gain = _audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, t);
-    osc.frequency.setValueAtTime(660, t + 0.1);
-    gain.gain.setValueAtTime(0.001, t);
-    gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-    osc.connect(gain); gain.connect(_audioCtx.destination);
-    osc.start(t); osc.stop(t + 0.35);
+    if (!_notifAudio) {
+      _notifAudio = new Audio(_makeBeepUrl());
+      _notifAudio.volume = 0.7;
+      _notifAudio.preload = 'auto';
+    }
+    _notifAudio.currentTime = 0;
+    const p = _notifAudio.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
   } catch (_) {}
 }
-// One-time unlock so AudioContext can play on mobile (browsers require user gesture)
+// Pre-warm on first user gesture so mobile browsers allow later .play()
 function _unlockAudio() {
   try {
-    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (_audioCtx.state === 'suspended') _audioCtx.resume?.();
+    if (!_notifAudio) {
+      _notifAudio = new Audio(_makeBeepUrl());
+      _notifAudio.volume = 0.7;
+      _notifAudio.preload = 'auto';
+    }
+    // Play muted then immediately pause — this "unlocks" further .play() calls
+    _notifAudio.muted = true;
+    const p = _notifAudio.play();
+    if (p && typeof p.then === 'function') {
+      p.then(() => { _notifAudio.pause(); _notifAudio.muted = false; _notifAudio.currentTime = 0; })
+       .catch(() => { _notifAudio.muted = false; });
+    } else {
+      _notifAudio.muted = false;
+    }
   } catch (_) {}
-  document.removeEventListener('click', _unlockAudio);
-  document.removeEventListener('touchstart', _unlockAudio);
 }
 if (typeof document !== 'undefined') {
   document.addEventListener('click', _unlockAudio, { once: true });
@@ -136,8 +172,9 @@ if (typeof document !== 'undefined') {
 function showNativeNotif(title, body, tag) {
   try {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    const opts = { body, icon: './icons/icon-192.png', badge: './icons/icon-192.png', tag, vibrate: [200, 100, 200], requireInteraction: false };
-    // Service-worker path is more reliable on Android Chrome (and supports vibrate)
+    // Make the tag unique per fire so the OS shows a fresh popup every time
+    const uniqueTag = `${tag}_${Date.now()}`;
+    const opts = { body, icon: './icons/icon-192.png', badge: './icons/icon-192.png', tag: uniqueTag, vibrate: [200, 100, 200], renotify: true, requireInteraction: false, silent: false };
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then(reg => {
         try { reg.showNotification(title, opts); }
@@ -176,17 +213,35 @@ function NotifBell({ count, onClick, light = false }) {
   );
 }
 
-function NotificationPanel({ notifications, onOpenIssue, onMarkAllRead, onClose }) {
+function NotificationPanel({ notifications, onOpenIssue, onMarkAllRead, onTest, onClose }) {
   const TYPE_ICON = { new_issue: '🆕', status_change: '🔄', new_comment: '💬', reopened: '🔁', assigned: '👋' };
   const unread = notifications.filter(n => !n.read).length;
+  const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'unsupported';
+  const requestPerm = () => { try { Notification.requestPermission?.(); } catch (_) {} };
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.2)' }}>
-      <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', right: 12, top: 12, width: 'min(340px, calc(100vw - 24px))', maxHeight: 'min(500px, calc(100vh - 24px))', background: 'white', borderRadius: 16, boxShadow: '0 8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', right: 12, top: 12, width: 'min(360px, calc(100vw - 24px))', maxHeight: 'min(540px, calc(100vh - 24px))', background: 'white', borderRadius: 16, boxShadow: '0 8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #F3F4F6', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>Notifications</span>
+          <button onClick={onTest} title="Test sound + popup" style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, padding: '4px 8px', border: '1px solid #E5E7EB', borderRadius: 8 }}>Test</button>
           {unread > 0 && <button onClick={onMarkAllRead} style={{ fontSize: 12, color: '#2563EB', fontWeight: 600, padding: '4px 8px' }}>Mark all read</button>}
           <button onClick={onClose} style={{ padding: 4 }}><Icon name="x" size={16} color="#6B7280" /></button>
         </div>
+        {perm === 'default' && (
+          <button onClick={requestPerm} style={{ padding: '10px 16px', background: '#FEF3C7', borderBottom: '1px solid #FDE68A', fontSize: 12, color: '#92400E', fontWeight: 600, textAlign: 'left' }}>
+            ⚠ Browser popups not enabled · tap to allow
+          </button>
+        )}
+        {perm === 'denied' && (
+          <div style={{ padding: '10px 16px', background: '#FEE2E2', borderBottom: '1px solid #FCA5A5', fontSize: 12, color: '#991B1B' }}>
+            🚫 Browser popups blocked. Open site settings → Notifications → Allow, then refresh.
+          </div>
+        )}
+        {perm === 'unsupported' && (
+          <div style={{ padding: '10px 16px', background: '#F3F4F6', borderBottom: '1px solid #E5E7EB', fontSize: 12, color: '#6B7280' }}>
+            ℹ This browser doesn't support OS popups. In-app + sound only.
+          </div>
+        )}
         <div style={{ overflow: 'auto', flex: 1 }}>
           {notifications.length === 0 ? (
             <div style={{ padding: '40px 16px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
@@ -416,17 +471,24 @@ function App() {
     if (!user) return;
     const { issue, comments } = openIssueData;
     if (!issue) return;
-    const count = (comments || []).length;
+    const list = comments || [];
+    const count = list.length;
     const prev = lastCommentRef.current[issue.issue_id];
     if (prev !== undefined && count > prev) {
-      if (user.role === 'workshop' && issue.raised_by === user.user_id) {
-        addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}` });
-      }
-      if (['admin', 'manager'].includes(user.role)) {
-        addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}: ${issue.title || ''}` });
-      }
-      if (user.role === 'poc' && issue.assigned_to === user.user_id) {
-        addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}: ${issue.title || ''}` });
+      // Only notify about messages from OTHERS — never echo back the user's own posts.
+      // Comments are ordered ascending by created_at, so newcomers sit at the end.
+      const newOnes = list.slice(prev);
+      const fromOthers = newOnes.filter(c => c.commented_by && c.commented_by !== user.user_id);
+      if (fromOthers.length > 0) {
+        if (user.role === 'workshop' && issue.raised_by === user.user_id) {
+          addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}` });
+        }
+        if (['admin', 'manager'].includes(user.role)) {
+          addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}: ${issue.title || ''}` });
+        }
+        if (user.role === 'poc' && issue.assigned_to === user.user_id) {
+          addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}: ${issue.title || ''}` });
+        }
       }
     }
     lastCommentRef.current[issue.issue_id] = count;
@@ -607,11 +669,18 @@ function App() {
   const openNotifPanel = () => setNotifOpen(v => !v);
   const closeNotifPanel = () => { setNotifOpen(false); markAllRead(); };
 
+  const onTestNotif = () => {
+    toast('🔔 Test — sound + native popup', 'info', 4000);
+    playNotifSound();
+    showNativeNotif('Refurb Helpdesk', 'Test notification — if you see this, popups work!', 'test');
+  };
+
   const notifPanel = notifOpen && (
     <NotificationPanel
       notifications={notifications}
       onOpenIssue={id => { openIssue(id); setNotifOpen(false); markAllRead(); }}
       onMarkAllRead={markAllRead}
+      onTest={onTestNotif}
       onClose={closeNotifPanel}
     />
   );
