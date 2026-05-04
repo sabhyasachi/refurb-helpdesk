@@ -223,10 +223,12 @@ function NotificationPanel({ notifications, onOpenIssue, onMarkAllRead, onTest, 
       <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', right: 12, top: 12, width: 'min(360px, calc(100vw - 24px))', maxHeight: 'min(540px, calc(100vh - 24px))', background: 'white', borderRadius: 16, boxShadow: '0 8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #F3F4F6', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>Notifications</span>
-          <button onClick={onTest} title="Test sound + popup" style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, padding: '4px 8px', border: '1px solid #E5E7EB', borderRadius: 8 }}>Test</button>
           {unread > 0 && <button onClick={onMarkAllRead} style={{ fontSize: 12, color: '#2563EB', fontWeight: 600, padding: '4px 8px' }}>Mark all read</button>}
           <button onClick={onClose} style={{ padding: 4 }}><Icon name="x" size={16} color="#6B7280" /></button>
         </div>
+        <button onClick={onTest} style={{ padding: '12px 16px', background: '#111827', color: 'white', borderBottom: '1px solid #F3F4F6', fontSize: 13, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          🔊 Test sound + popup
+        </button>
         {perm === 'default' && (
           <button onClick={requestPerm} style={{ padding: '10px 16px', background: '#FEF3C7', borderBottom: '1px solid #FDE68A', fontSize: 12, color: '#92400E', fontWeight: 600, textAlign: 'left' }}>
             ⚠ Browser popups not enabled · tap to allow
@@ -282,7 +284,7 @@ function App() {
   const [notifications, setNotifications] = React.useState([]);
   const [notifOpen, setNotifOpen]         = React.useState(false);
   const lastSeenRef    = React.useRef(null);   // {[issue_id]:{status}} — null = not yet initialised
-  const lastCommentRef = React.useRef({});     // {[issue_id]: comment_count}
+  const seenCommentsRef = React.useRef({});    // {[issue_id]: Set of comment_ids already observed}
   const notifDedupRef  = React.useRef(new Set()); // prevents double-firing within same 2-min window
   const diffNotifRef   = React.useRef(null);   // always points to latest diffAndNotify
 
@@ -464,7 +466,8 @@ function App() {
     return () => { alive = false; clearInterval(t); };
   }, [session?.user?.user_id]);
 
-  // Comment count tracking — notify when new messages appear in currently-open issue
+  // Comment tracking — notify when NEW messages from OTHER users land in the open issue.
+  // Tracks comment_ids (not counts) so it's robust against retries, reorderings and races.
   React.useEffect(() => {
     if (!openIssueData) return;
     const user = window.SESSION?.user;
@@ -472,26 +475,31 @@ function App() {
     const { issue, comments } = openIssueData;
     if (!issue) return;
     const list = comments || [];
-    const count = list.length;
-    const prev = lastCommentRef.current[issue.issue_id];
-    if (prev !== undefined && count > prev) {
-      // Only notify about messages from OTHERS — never echo back the user's own posts.
-      // Comments are ordered ascending by created_at, so newcomers sit at the end.
-      const newOnes = list.slice(prev);
-      const fromOthers = newOnes.filter(c => c.commented_by && c.commented_by !== user.user_id);
-      if (fromOthers.length > 0) {
-        if (user.role === 'workshop' && issue.raised_by === user.user_id) {
-          addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}` });
-        }
-        if (['admin', 'manager'].includes(user.role)) {
-          addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}: ${issue.title || ''}` });
-        }
-        if (user.role === 'poc' && issue.assigned_to === user.user_id) {
-          addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}: ${issue.title || ''}` });
-        }
-      }
+
+    let seen = seenCommentsRef.current[issue.issue_id];
+    if (!seen) {
+      // First view of this issue — mark every existing comment as seen, no notifications
+      seen = new Set(list.map(c => c.comment_id).filter(Boolean));
+      seenCommentsRef.current[issue.issue_id] = seen;
+      return;
     }
-    lastCommentRef.current[issue.issue_id] = count;
+
+    const newComments = list.filter(c => c.comment_id && !seen.has(c.comment_id));
+    // Always mark them as seen — even own messages — so we never re-notify
+    newComments.forEach(c => seen.add(c.comment_id));
+
+    const fromOthers = newComments.filter(c => c.commented_by && c.commented_by !== user.user_id);
+    if (fromOthers.length === 0) return;
+
+    if (user.role === 'workshop' && issue.raised_by === user.user_id) {
+      addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}` });
+    }
+    if (['admin', 'manager'].includes(user.role)) {
+      addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}: ${issue.title || ''}` });
+    }
+    if (user.role === 'poc' && issue.assigned_to === user.user_id) {
+      addNotif({ type: 'new_comment', issue_id: issue.issue_id, message: `New message on ${issue.issue_id}: ${issue.title || ''}` });
+    }
   }, [openIssueData]);
 
   // ─── Auth ─────────────────────────────────────────────────────────────────
@@ -506,7 +514,7 @@ function App() {
     setSession(null); setIssues([]); setUsers([]);
     setOpenIssueId(null); setOpenIssueData(null); setPage('home');
     setNotifications([]); setNotifOpen(false);
-    lastSeenRef.current = null; lastCommentRef.current = {}; notifDedupRef.current = new Set();
+    lastSeenRef.current = null; seenCommentsRef.current = {}; notifDedupRef.current = new Set();
   };
 
   const openIssue = (id) => { setOpenIssueId(id); };
