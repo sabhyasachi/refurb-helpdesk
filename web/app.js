@@ -100,6 +100,55 @@ function MobileSkeleton() {
   );
 }
 
+// ─── Notification sound + native popup helpers ────────────────────────────────
+let _audioCtx = null;
+function playNotifSound() {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') { try { _audioCtx.resume(); } catch (_) {} }
+    const t = _audioCtx.currentTime;
+    const osc = _audioCtx.createOscillator();
+    const gain = _audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, t);
+    osc.frequency.setValueAtTime(660, t + 0.1);
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc.connect(gain); gain.connect(_audioCtx.destination);
+    osc.start(t); osc.stop(t + 0.35);
+  } catch (_) {}
+}
+// One-time unlock so AudioContext can play on mobile (browsers require user gesture)
+function _unlockAudio() {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume?.();
+  } catch (_) {}
+  document.removeEventListener('click', _unlockAudio);
+  document.removeEventListener('touchstart', _unlockAudio);
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', _unlockAudio, { once: true });
+  document.addEventListener('touchstart', _unlockAudio, { once: true });
+}
+
+function showNativeNotif(title, body, tag) {
+  try {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const opts = { body, icon: './icons/icon-192.png', badge: './icons/icon-192.png', tag, vibrate: [200, 100, 200], requireInteraction: false };
+    // Service-worker path is more reliable on Android Chrome (and supports vibrate)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(reg => {
+        try { reg.showNotification(title, opts); }
+        catch (_) { try { new Notification(title, opts); } catch (_2) {} }
+      }).catch(() => { try { new Notification(title, opts); } catch (_) {} });
+    } else {
+      new Notification(title, opts);
+    }
+  } catch (_) {}
+}
+
 function Toast({ toasts, onDismiss }) {
   return (
     <div style={{ position: 'fixed', bottom: 24, right: 24, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 200, pointerEvents: 'none' }}>
@@ -198,14 +247,13 @@ function App() {
     notifDedupRef.current.add(key);
     const n = { ...notif, id: Math.random().toString(36).slice(2), at: new Date().toISOString(), read: false };
     setNotifications(prev => [n, ...prev].slice(0, 50));
-    // Always-visible in-app toast (works regardless of tab visibility / permission)
+    // Three layers of feedback — at least one will land:
+    // 1) In-app toast (always works)
     toast(`🔔 ${notif.message}`, 'info', 5000);
-    // Native browser push when tab is backgrounded — extra layer
-    try {
-      if (document.visibilityState !== 'visible' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification('Refurb Helpdesk', { body: notif.message, icon: './icons/icon-192.png', tag: key });
-      }
-    } catch (_) {}
+    // 2) WebAudio beep (works in tab, even without notif permission)
+    playNotifSound();
+    // 3) Native OS notification (always — fires even when tab is visible)
+    showNativeNotif('Refurb Helpdesk', notif.message, key);
   };
 
   const diffAndNotify = (newIssues) => {

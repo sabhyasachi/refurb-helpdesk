@@ -1,7 +1,7 @@
 // Minimal service worker: cache-first for static shell, network-first for API.
 // Bump CACHE_VERSION to invalidate the shell on deploy.
 
-const CACHE_VERSION = 'rh-shell-v2';
+const CACHE_VERSION = 'rh-shell-v3';
 const SHELL = [
   './',
   './index.html',
@@ -30,6 +30,18 @@ self.addEventListener('activate', (e) => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)));
     await self.clients.claim();
+  })());
+});
+
+// Bring tab to focus (or open one) when user taps a native notification.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    const clientsArr = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of clientsArr) {
+      if (c.url.includes(self.registration.scope) && 'focus' in c) return c.focus();
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(self.registration.scope);
   })());
 });
 
